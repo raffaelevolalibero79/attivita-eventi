@@ -1,0 +1,60 @@
+rules_version = '2';
+
+// Regole di sicurezza del database.
+// Solo gli indirizzi e-mail elencati nel documento  config/access  (campo "emails")
+// possono leggere o scrivere. Tutto il resto è negato.
+//
+// Per attivarle: console Firebase → Firestore Database → Regole → incolla questo testo → Pubblica.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function listed() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in get(/databases/$(database)/documents/config/access).data.emails;
+    }
+
+    // Lista famiglia: la crei tu a mano la prima volta (vedi guida); poi chi è in lista può aggiungere altri.
+    match /config/access {
+      allow read: if listed();
+      allow update: if listed()
+        && request.resource.data.keys().hasOnly(['emails'])
+        && request.resource.data.emails is list
+        && request.resource.data.emails.size() >= 1
+        && request.resource.data.emails.size() <= 6;
+      allow create, delete: if false;
+    }
+
+    match /events/{id} {
+      allow read, delete: if listed();
+      allow create, update: if listed()
+        && request.resource.data.id == id
+        && request.resource.data.keys().size() <= 40;
+    }
+
+    match /places/{id} {
+      allow read, delete: if listed();
+      allow create, update: if listed()
+        && request.resource.data.id == id
+        && request.resource.data.keys().size() <= 40;
+    }
+
+    match /trips/{id} {
+      allow read, delete: if listed();
+      allow create, update: if listed()
+        && request.resource.data.id == id
+        && request.resource.data.keys().size() <= 40;
+    }
+
+    // Anteprime delle foto (immagini piccole e compresse dentro il database)
+    match /thumbs/{id} {
+      allow read, delete: if listed();
+      allow create, update: if listed()
+        && request.resource.data.keys().hasOnly(['img', 'ts'])
+        && request.resource.data.img is string
+        && request.resource.data.img.size() < 600000
+        && request.resource.data.img.matches('data:image/.*');
+    }
+  }
+}
