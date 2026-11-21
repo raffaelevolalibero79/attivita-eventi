@@ -6,7 +6,8 @@ import { createCalendar } from './calendar.js';
 import { createMapView } from './mapview.js';
 import { createSections } from './sections.js';
 import { openEventForm, openPlaceForm, openEventDetail, openPlaceDetail, openTripForm, openTripView } from './forms.js';
-import { openAddMenu, readImage, readText, placeFromMaps, pickImageFromUser, takePhoto } from './capture.js';
+import { openAddMenu, readImage, readText, openPlaceFromMaps, pickImageFromUser, takePhoto } from './capture.js';
+import { APP_VERSION } from './version.js';
 import { openSettings, getHome, getSettings, statusText } from './settings.js';
 import { getPosition, reverseGeocode } from './geo.js';
 
@@ -86,17 +87,17 @@ async function main() {
     store, data: () => { if (stale) applyFilters(); return data; }, home: getHome,
     pickOnMap: (m) => (mapApi ? mapApi.pick(m) : Promise.resolve(null)),
     showOnMap: (lat, lng) => { if (mapApi) mapApi.flyTo(lat, lng); },
-    pickImage: async () => {
-      return new Promise((resolve) => {
-        const sh = openSheet({
-          title: 'Da dove prendo la foto?',
-          body: el('div', { class: 'menu-list' },
-            el('button', { class: 'btn', type: 'button', text: '📷 Scatta ora', onclick: async () => { sh.forceClose(); resolve(await takePhoto()); } }),
-            el('button', { class: 'btn', type: 'button', text: '🖼️ Scegli dalla galleria', onclick: async () => { sh.forceClose(); resolve(await pickImageFromUser()); } })),
-          onClose: () => resolve(null),
-        });
+    pickImage: () => new Promise((resolve) => {
+      let chosen = false;       // se si è scelta una delle due voci, la finestra si chiude ma la risposta arriva dopo, a file scelto
+      const pick = (fn) => async () => { chosen = true; sh.forceClose(); resolve(await fn()); };
+      const sh = openSheet({
+        title: 'Da dove prendo la foto?',
+        body: el('div', { class: 'menu-list' },
+          el('button', { class: 'btn', type: 'button', text: '📷 Scatta ora', onclick: pick(takePhoto) }),
+          el('button', { class: 'btn', type: 'button', text: '🖼️ Scegli dalla galleria', onclick: pick(pickImageFromUser) })),
+        onClose: () => { if (!chosen) resolve(null); },
       });
-    },
+    }),
     readImage, readText,
     setStatus: (coll, item, status) => { store.put(coll, { ...item, status }); },
     afterSave: (coll, doc) => {
@@ -114,8 +115,8 @@ async function main() {
     handleIncoming: async (raw, { forDate = '' } = {}) => {
       const urls = U.extractUrls(raw).map(U.safeUrl).filter(Boolean);
       const mapsUrl = urls.find((u) => U.linkKind(u) === 'maps') || null;
-      const looksPlace = !!mapsUrl || urls.some((u) => U.parseMapsUrl(u));
-      if (looksPlace) { const r = await placeFromMaps(raw); openPlaceForm(ctx, r.draft, { isNew: true, note: r.note }); return; }
+      const looksPlace = !!mapsUrl || urls.some((u) => U.parseMapsUrl(u)) || (!urls.length && !!U.parseCoords(raw) && raw.trim().length < 80);
+      if (looksPlace) { await openPlaceFromMaps(ctx, raw); return; }
       const r = await readText(raw);
       if (forDate && !r.draft.startDate) r.draft.startDate = forDate;
       openEventForm(ctx, r.draft, { isNew: true, note: r.note });
@@ -227,6 +228,7 @@ async function main() {
   fab.hidden = false;
   fab.addEventListener('click', () => openAddMenu(ctx));
 
+  const verEl = $('#ver'); if (verEl) verEl.textContent = 'v' + APP_VERSION;
   renderFilters();
   applyFilters();
   refresh();
@@ -239,7 +241,11 @@ async function main() {
     if (incoming.trim()) setTimeout(() => ctx.handleIncoming(incoming).catch((e) => toast(e.message, 'error')), 300);
   }
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker non attivo', e));
+  if ('serviceWorker' in navigator) {
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker non attivo', e));
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) toast('App aggiornata: chiudila e riaprila per usare la versione nuova.'); });
+  }
 }
 
 main().catch((e) => { console.error(e); const g = document.getElementById('gate'); g.hidden = false; clear(g).append(el('h2', { text: 'Qualcosa è andato storto' }), el('p', { text: String(e && e.message || e) }), el('button', { class: 'btn primary', text: 'Ricarica', onclick: () => location.reload() })); });

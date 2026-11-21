@@ -19,12 +19,6 @@ export const FIREBASE_CONFIG = {
 // Versione della libreria Firebase caricata dal sito ufficiale di Google.
 export const FIREBASE_VERSION = '10.14.1';
 
-// Librerie della mappa (Leaflet) e del riconoscimento testo (Tesseract):
-//  false = vengono caricate da unpkg / jsdelivr in versione fissa (più semplice)
-//  true  = le legge da una copia nella cartella "vendor" dell'app (più sicuro: nessun codice di terzi
-//          caricato a ogni apertura). Per creare la cartella esegui "scarica-librerie.sh" (vedi la guida).
-export const USE_LOCAL_LIBS = false;
-
 // Modelli per il riconoscimento opzionale con Claude (chiave API inserita nelle Impostazioni).
 export const CLAUDE_MODELS = {
   'claude-sonnet-5-5': 'Sonnet 5.5 — più preciso (circa 0,008 $ a foto)',

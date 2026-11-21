@@ -4,6 +4,7 @@ import { el, openSheet, toast, confirmDialog, field, select, downloadText, pickF
 import { CLAUDE_MODELS, CLAUDE_DEFAULT_MODEL, FIREBASE_CONFIG } from './config.js';
 import { geocode, getPosition } from './geo.js';
 import { cloudConfigured, isLocalOnlyChosen, setLocalOnly } from './store.js';
+import { APP_VERSION, APP_DATE, CHANGELOG } from './version.js';
 
 const KEY = 'ae.settings';
 const DEFAULTS = { homeLat: null, homeLng: null, homeName: '', claudeKey: '', claudeModel: CLAUDE_DEFAULT_MODEL, useClaude: false, ocrAfterClaudeFail: true };
@@ -140,8 +141,10 @@ export function openSettings({ store, onChanged }) {
       } })),
     el('div', { class: 'hint', text: 'L\'importazione aggiunge o aggiorna gli elementi, senza cancellare quelli che già ci sono.' }));
 
+  const news = el('details', { class: 'fold' }, el('summary', { text: 'Novità delle versioni' }),
+    ...CHANGELOG.map((c) => el('div', null, el('div', { class: 'sub', text: `Versione ${c.v} · ${c.d}` }), el('ul', { class: 'news' }, c.items.map((t) => el('li', { text: t }))))));
   append2(body, accBox, homeBox, claudeBox, backupBox,
-    el('div', { class: 'hint', text: `Versione 1 · progetto sincronizzazione: ${FIREBASE_CONFIG.projectId || 'non collegato'}${isLocalOnlyChosen() ? ' (disattivata)' : ''}` }));
+    el('div', { class: 'hint', text: `Versione ${APP_VERSION} (${APP_DATE}) · progetto sincronizzazione: ${FIREBASE_CONFIG.projectId || 'non collegato'}${isLocalOnlyChosen() ? ' (disattivata)' : ''}` }), news);
 
   const sh = openSheet({ title: 'Impostazioni', body });
   return sh;

@@ -1,5 +1,5 @@
 // forms.js — moduli (luogo, evento, viaggio) e schede di dettaglio.
-import { el, clear, openSheet, toast, confirmDialog, chip, field, select } from './ui.js';
+import { el, clear, openSheet, toast, confirmDialog, chip, field, select, thumbImg } from './ui.js';
 import * as U from './util.js';
 import { geocodePlace, reverseGeocode, getPosition } from './geo.js';
 import { eventRow, placeRow } from './sections.js';
@@ -46,7 +46,7 @@ function locationBlock(ctx, init, getName, getSheet) {
     if (!addr.value.trim() && !getName().trim()) { if (!auto) toast('Scrivi un indirizzo o il nome del posto.', 'error'); return; }
     busy(b, true);
     try {
-      const r = await geocodePlace(getName().trim(), addr.value.trim());
+      const r = await geocodePlace(getName().trim(), addr.value.trim(), { near: ctx.home() });
       if (!r.length) { if (!auto) results.append(el('div', { class: 'hint', text: 'Nessun risultato: prova a scrivere città e via, oppure scegli sulla mappa.' })); return; }
       if (auto) { set(r[0].lat, r[0].lng); toast('Posizione trovata dall\'indirizzo: controllala sulla mappa'); return; }
       results.append(el('div', { class: 'hint', text: 'Scegli il risultato giusto:' }));
@@ -139,7 +139,7 @@ function recurrenceEditor(initial, getStart) {
 // ============================================================
 export function openEventForm(ctx, draft = {}, { isNew = true, thumb = null, note = '' } = {}) {
   const d = U.sanitizeDoc('events', { ...draft });
-  if (!draft.id) { d.title = draft.title || ''; }
+  if (isNew) { d.title = draft.title || ''; }      // una bozza letta da foto/testo ha già un id, ma il titolo vuoto resta vuoto
   let dirty = !!note || isNew && !!draft.title;
   let sh;
   const state = { thumb };
@@ -164,7 +164,7 @@ export function openEventForm(ctx, draft = {}, { isNew = true, thumb = null, not
 
   const drawThumb = () => {
     clear(thumbBox);
-    if (state.thumb) thumbBox.append(el('img', { class: 'thumb', src: state.thumb, alt: 'Anteprima della locandina' }));
+    if (state.thumb) thumbBox.append(el('div', { class: 'lbl', text: 'Locandina (tocca per ingrandire)' }), thumbImg(state.thumb));
   };
   const drawNote = (t, kind = 'warn') => { clear(noteBox); if (t) noteBox.append(el('div', { class: kind, text: t })); };
   drawThumb(); drawNote(note);
@@ -244,7 +244,7 @@ export function openEventForm(ctx, draft = {}, { isNew = true, thumb = null, not
 // ============================================================
 export function openPlaceForm(ctx, draft = {}, { isNew = true, thumb = null, note = '' } = {}) {
   const d = U.sanitizeDoc('places', { ...draft });
-  if (!draft.id) d.name = draft.name || '';
+  if (isNew) d.name = draft.name || '';
   let dirty = !!note || (isNew && !!draft.name);
   let sh;
   const name = text(d.name, 'Nome del luogo');
@@ -333,7 +333,7 @@ export function openEventDetail(ctx, id, occDate) {
     }
     if (ev.hasThumb) {
       const holder = el('div', null, el('div', { class: 'hint', text: 'Carico l\'anteprima…' }));
-      ctx.store.getThumb(ev.id).then((img) => { clear(holder); if (img) holder.append(el('div', { class: 'lbl', text: 'Locandina (anteprima)' }), el('img', { class: 'thumb', src: img, alt: 'Anteprima della locandina' })); });
+      ctx.store.getThumb(ev.id).then((img) => { clear(holder); if (img) holder.append(el('div', { class: 'lbl', text: 'Locandina (tocca per ingrandire)' }), thumbImg(img)); else holder.append(el('div', { class: 'hint', text: 'L\'anteprima della locandina non è disponibile (non ancora sincronizzata o rimossa).' })); });
       out.push(holder);
     }
     return out;

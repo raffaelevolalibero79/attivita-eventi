@@ -1,4 +1,4 @@
-// sections.js — righe riutilizzabili e sezioni a tendina (Prossimi eventi, Da valutare, Luoghi, Viaggi, Statistiche).
+// sections.js — righe riutilizzabili e sezioni a tendina (Prossimi eventi, Da valutare, Luoghi, Viaggi).
 import { el, clear } from './ui.js';
 import * as U from './util.js';
 
@@ -26,6 +26,7 @@ export function eventRow(occ, { onOpen, onStatus }) {
   const rec = U.describeRecurrence(ev.rec, ev.startDate);
   const tags = [el('span', { class: 'tag', text: `${cat(ev.category).icon} ${cat(ev.category).label}` })];
   if (rec) tags.push(el('span', { class: 'tag', text: '↻ ricorrente' }));
+  if (ev.hasThumb) tags.push(el('span', { class: 'tag', text: '📷 locandina' }));
   if (ev.status !== 'interessa') tags.push(el('span', { class: 'tag', text: U.STATUSES[sk(ev.status)].short }));
   return el('div', { class: `row cat-${U.CATEGORIES[ev.category] ? ev.category : 'attivita'} st-${sk(ev.status)}` },
     el('div', { class: 'stripe' }),
@@ -59,7 +60,6 @@ export function createSections(host, ctx) {
     { id: 'eval', title: '❔ Da valutare', build: buildEval, count: (d) => evalItems(d).events.length + evalItems(d).places.length },
     { id: 'places', title: '📍 Luoghi', build: buildPlaces, count: (d) => d.fPlaces.length },
     { id: 'trips', title: '🧳 Viaggi', build: buildTrips, count: (d) => d.trips.length },
-    { id: 'stats', title: '📊 Statistiche', build: buildStats, count: () => null },
   ];
   const nodes = {};
   for (const def of defs) {
@@ -126,27 +126,6 @@ export function createSections(host, ctx) {
     }
     return out;
   }
-  function buildStats(data) {
-    const all = [...data.allEvents, ...data.allPlaces];
-    const t = today();
-    const monthEnd = U.toYmd(+t.slice(0, 4), +t.slice(5, 7), U.daysInMonth(+t.slice(0, 4), +t.slice(5, 7)));
-    const inMonth = data.allEvents.flatMap((e) => U.expandOccurrences(e, t, monthEnd, 100)).filter((o) => o.ev.status !== 'non_interessa').length;
-    const next30 = data.allEvents.flatMap((e) => U.expandOccurrences(e, t, U.addDays(t, 30), 100)).filter((o) => o.ev.status === 'interessa').length;
-    const stat = (n, label) => el('div', { class: 'stat' }, el('b', { text: String(n) }), el('span', { text: label }));
-    const byStatus = U.STATUS_KEYS.map((k) => [U.STATUSES[k].label, all.filter((x) => x.status === k).length]);
-    const max = Math.max(1, ...byStatus.map((x) => x[1]), ...U.CAT_KEYS.map((k) => all.filter((x) => x.category === k).length));
-    const bar = (label, n, cls) => el('div', { class: `b ${cls || ''}` }, el('span', { text: label }), el('i', { style: { width: `${Math.max(3, (n / max) * 100)}%` } }), el('span', { text: String(n) }));
-    const budget = data.trips.reduce((s, tr) => s + tr.budget.reduce((a, b) => a + b.amount, 0), 0);
-    return [
-      el('div', { class: 'stat-grid' }, stat(data.allEvents.length, 'eventi salvati'), stat(data.allPlaces.length, 'luoghi salvati'), stat(inMonth, 'eventi da oggi a fine mese'), stat(next30, 'eventi "mi interessa" nei prossimi 30 giorni')),
-      el('div', { class: 'sub', text: 'Per categoria' }),
-      el('div', { class: 'bars' }, U.CAT_KEYS.map((k) => bar(`${U.CATEGORIES[k].icon} ${U.CATEGORIES[k].label}`, all.filter((x) => x.category === k).length, `cat-${k}`))),
-      el('div', { class: 'sub', text: 'Per stato' }),
-      el('div', { class: 'bars' }, byStatus.map(([l, n]) => bar(l, n))),
-      data.trips.length ? el('div', { class: 'hint', text: `Budget totale dei viaggi: ${budget.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}` }) : null,
-    ];
-  }
-
   function fill(def) {
     const data = ctx.data();
     const n = nodes[def.id];

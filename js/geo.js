@@ -1,5 +1,7 @@
 // geo.js — ricerca luoghi (OpenStreetMap / Nominatim, gratuita) e posizione GPS.
 // Nominatim chiede di non superare 1 richiesta al secondo: le richieste vengono distanziate.
+import { haversineKm, cleanAddress, cityFromAddress } from './util.js';
+
 const BASE = 'https://nominatim.openstreetmap.org';
 let last = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -23,23 +25,45 @@ async function nominatim(path) {
 
 const toResult = (r) => ({ lat: +r.lat, lng: +r.lon, label: String(r.display_name || '').slice(0, 300), name: String(r.name || '').slice(0, 200), type: r.type || '' });
 
-export async function geocode(query, { limit = 6 } = {}) {
+// near = { lat, lng } (facoltativo): i risultati vicini a quel punto passano avanti, ma si trova anche il resto del mondo.
+export async function geocode(query, { limit = 6, near = null } = {}) {
   const q = String(query || '').trim();
   if (q.length < 2) return [];
-  const data = await nominatim(`search?format=jsonv2&limit=${limit}&accept-language=it&addressdetails=0&q=${encodeURIComponent(q.slice(0, 250))}`);
+  let view = '';
+  if (near && Number.isFinite(near.lat) && Number.isFinite(near.lng)) {
+    const dLat = 1.2, dLng = 1.6;
+    view = `&viewbox=${(near.lng - dLng).toFixed(4)},${(near.lat + dLat).toFixed(4)},${(near.lng + dLng).toFixed(4)},${(near.lat - dLat).toFixed(4)}&bounded=0`;
+  }
+  const data = await nominatim(`search?format=jsonv2&limit=${limit}&accept-language=it&addressdetails=0${view}&q=${encodeURIComponent(q.slice(0, 250))}`);
   return (Array.isArray(data) ? data : []).map(toResult).filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lng));
 }
 
-// Prova "nome, indirizzo" e poi solo l'indirizzo: così i locali piccoli si trovano più spesso.
-export async function geocodePlace(name, address) {
+// Cerca un luogo da nome e/o indirizzo (anche quelli copiati da Google Maps).
+// Prova prima l'indirizzo ripulito, poi "nome, città", poi "nome, indirizzo", poi il solo nome:
+// si ferma alla prima ricerca che trova qualcosa e restituisce fino a 5 candidati diversi tra loro.
+export async function geocodePlace(name, address, { near = null } = {}) {
+  const addr = cleanAddress(address), city = cityFromAddress(address);
+  const n = String(name || '').trim();
   const tries = [];
-  if (name && address) tries.push(`${name}, ${address}`);
-  if (address) tries.push(address);
-  if (name) tries.push(name);
+  if (addr) tries.push(addr);
+  if (n && city) tries.push(`${n}, ${city}`);
+  if (n && addr && addr !== city) tries.push(`${n}, ${addr}`);
+  if (n) tries.push(n);
+  const seen = new Set();
+  let lastError = null;
   for (const q of tries) {
-    const r = await geocode(q, { limit: 5 });
-    if (r.length) return r;
+    if (seen.has(q.toLowerCase())) continue;
+    seen.add(q.toLowerCase());
+    let r = [];
+    try { r = await geocode(q, { limit: 5, near }); } catch (e) { lastError = e; continue; }
+    const out = [];
+    for (const x of r) if (!out.some((o) => haversineKm(o, x) < 0.15)) out.push(x);
+    if (out.length) {
+      if (near) for (const x of out) x.km = haversineKm(near, x);
+      return out;
+    }
   }
+  if (lastError) throw lastError;
   return [];
 }
 

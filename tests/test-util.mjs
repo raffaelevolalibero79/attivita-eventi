@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import * as U from '../js/util.js';
+import { readFileSync } from 'node:fs';
+import { APP_VERSION, CHANGELOG } from '../js/version.js';
 
 let n = 0;
 const t = (name, fn) => { try { fn(); n++; console.log('ok  ', name); } catch (e) { console.error('FAIL', name, '\n  ', e.message); process.exitCode = 1; } };
@@ -157,5 +159,40 @@ t('evento da dati estratti', () => {
 t('distanza', () => {
   const km = U.haversineKm({ lat: 45.7, lng: 11.7 }, { lat: 45.54, lng: 11.55 });
   assert.ok(km > 15 && km < 25, String(km));
+});
+
+t('versione: uguale in app, service worker e novità', () => {
+  const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
+  assert.ok(sw.includes(`const VERSION = '${APP_VERSION}'`), 'sw.js ha un numero di versione diverso da js/version.js');
+  assert.equal(CHANGELOG[0].v, APP_VERSION);
+});
+t('coordinate incollate da Google Maps', () => {
+  assert.deepEqual(U.parseCoords('45.76540, 11.73450'), { lat: 45.7654, lng: 11.7345 });
+  assert.deepEqual(U.parseCoords('Bar Alpino\n45.76540,11.73450'), { lat: 45.7654, lng: 11.7345 });
+  assert.deepEqual(U.parseCoords('-33.86 151.20'), null);                      // servono almeno 3 decimali
+  assert.deepEqual(U.parseCoords('-33.86880 151.20930'), { lat: -33.8688, lng: 151.2093 });
+  assert.equal(U.parseCoords('Via Roma 12, 36061 Bassano'), null);
+  assert.equal(U.parseCoords('https://www.google.com/maps/@45.76540,11.73450,17z'), null);  // dentro un link: ci pensa parseMapsUrl
+  assert.equal(U.parseCoords('95.00000, 11.00000'), null);
+});
+t('testo condiviso da Google Maps: nome e indirizzo', () => {
+  const a = U.parseSharedPlaceText('Bar Centrale\nVia Roma 1, 36061 Bassano del Grappa VI\nhttps://maps.app.goo.gl/AbC');
+  assert.deepEqual([a.name, a.address, a.urls.length], ['Bar Centrale', 'Via Roma 1, 36061 Bassano del Grappa VI', 1]);
+  const b = U.parseSharedPlaceText('Trattoria Da Gino, Via Garibaldi 5, Breganze https://maps.app.goo.gl/x');
+  assert.deepEqual([b.name, b.address], ['Trattoria Da Gino', 'Via Garibaldi 5, Breganze']);
+  const c = U.parseSharedPlaceText('Posizione condivisa\nhttps://maps.app.goo.gl/x');
+  assert.deepEqual([c.name, c.address], ['', '']);
+  const d = U.parseSharedPlaceText('Bar Centrale\nBar Centrale\nhttps://maps.app.goo.gl/x');   // titolo e testo ripetuti
+  assert.deepEqual([d.name, d.address], ['Bar Centrale', '']);
+  const e = U.parseSharedPlaceText('Bar Alpino\n45.76540, 11.73450');
+  assert.deepEqual([e.name, e.address], ['Bar Alpino', '']);
+});
+t('indirizzo ripulito per la ricerca', () => {
+  assert.equal(U.cleanAddress('Via Roma 1, 36061 Bassano del Grappa VI'), 'Via Roma 1, 36061 Bassano del Grappa');
+  assert.equal(U.cleanAddress('Via Roma 1, 36061 Bassano del Grappa VI, Italia'), 'Via Roma 1, 36061 Bassano del Grappa');
+  assert.equal(U.cleanAddress('FRM4+23 Bassano del Grappa, Via Roma 1'), 'Bassano del Grappa, Via Roma 1');
+  assert.equal(U.cityFromAddress('Via Roma 1, 36061 Bassano del Grappa VI'), 'Bassano del Grappa');
+  assert.equal(U.cityFromAddress(''), '');
 });
 console.log(`\n${n} test superati`);

@@ -11,6 +11,24 @@ const step = async (name, fn) => { try { await fn(); n++; console.log('ok  ', na
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'it-IT', timezoneId: 'Europe/Rome', serviceWorkers: 'block' });
+// Prova sempre in modalità "solo questo telefono" (la rete esterna non c'è) e con un lettore di testo finto,
+// così si prova tutto il percorso della foto senza scaricare nulla.
+await ctx.addInitScript(() => {
+  try { localStorage.setItem('ae.localOnly', '1'); } catch { /* ignora */ }
+  window.Tesseract = { createWorker: async () => ({
+    recognize: async () => ({ data: { text: 'FESTA DELLA ZUCCA\nSabato 5 dicembre 2026\nore 18:00\nPresso Piazza Libertà, Breganze\nIngresso 5 euro' } }),
+    terminate: async () => {},
+  }) };
+});
+const nominatimLog = [];
+await ctx.route('https://nominatim.openstreetmap.org/**', (route) => {
+  const q = new URL(route.request().url()).searchParams.get('q') || '';
+  nominatimLog.push(q);
+  const body = /Via Roma/i.test(q)
+    ? [{ lat: '45.7664', lon: '11.7354', display_name: 'Via Roma 1, Bassano del Grappa, Vicenza, Veneto, Italia', name: '' }, { lat: '41.9028', lon: '12.4964', display_name: 'Via Roma 1, Roma, Lazio, Italia', name: '' }]
+    : [];
+  route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
+});
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
@@ -25,7 +43,9 @@ await step('avvio: calendario del mese corrente, sezioni chiuse', async () => {
   assert.match(await page.locator('.cal-head h2').innerText(), /Novembre 2026/);
   assert.equal(await page.locator('.cal-cell').count(), 42);
   assert.equal(await page.locator('details.sec[open]').count(), 0);
-  assert.equal(await page.locator('details.sec').count(), 5);
+  assert.equal(await page.locator('details.sec').count(), 4);
+  assert.doesNotMatch(await page.locator('#sections').innerText(), /Statistiche/);
+  assert.match(await page.locator('#ver').innerText(), /^v\d+\.\d+\.\d+$/);
   assert.equal(await page.locator('#gate').isHidden(), true);
   assert.match(await page.locator('#syncState').innerText(), /questo telefono/i);
 });
@@ -176,9 +196,7 @@ await step('i dati restano dopo aver riaperto l\'app', async () => {
   await page.waitForSelector('details.sec[data-id="trips"] .row');
   assert.match(await page.locator('details.sec[data-id="trips"]').innerText(), /Giappone 2027/);
 });
-await step('statistiche e backup (esporta / reimporta)', async () => {
-  await page.locator('details.sec[data-id="stats"] > summary').click();
-  await page.waitForFunction(() => /eventi salvati/.test(document.querySelector('details.sec[data-id="stats"]').innerText));
+await step('backup (esporta / reimporta)', async () => {
   const data = await page.evaluate(async () => {
     const { createStore } = await import('./js/store.js');
     const s = createStore(); await s.init();
@@ -193,6 +211,166 @@ await step('statistiche e backup (esporta / reimporta)', async () => {
   });
   assert.match(bad, /non sembra un backup/);
 });
+
+await step('finestre: aprirne una subito dopo averne chiusa un\'altra non rovina il tasto "indietro"', async () => {
+  await page.evaluate(async () => {
+    const ui = await import('./js/ui.js');
+    const hb = history.back.bind(history); history.back = () => setTimeout(hb, 60);   // "indietro" lento, come su un telefono carico
+    const a = ui.openSheet({ title: 'A' }); a.forceClose();
+    await new Promise((r) => setTimeout(r, 20));
+    ui.openSheet({ title: 'B' });
+    await new Promise((r) => setTimeout(r, 250));
+    history.back = hb;
+  });
+  assert.equal(await page.locator('.sheet').count(), 1);
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  assert.match(page.url(), /index\.html$/);
+});
+
+// ---------- foto, link, posizione da Google Maps ----------
+const fakeJpeg = async () => Buffer.from((await page.evaluate(() => {
+  const c = document.createElement('canvas'); c.width = 600; c.height = 800;
+  const g = c.getContext('2d'); g.fillStyle = '#f5c26b'; g.fillRect(0, 0, 600, 800); g.fillStyle = '#222'; g.font = '48px sans-serif'; g.fillText('FESTA DELLA ZUCCA', 20, 120);
+  return c.toDataURL('image/jpeg', 0.8).split(',')[1];
+})), 'base64');
+
+await step('foto: scelta dalla galleria → si apre la scheda compilata con l\'anteprima', async () => {
+  const buf = await fakeJpeg();
+  await page.click('#fab'); await page.getByRole('button', { name: /Evento da foto o locandina/ }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("Da dove prendo la foto?")');
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: /Scegli dalla galleria/ }).click()]);
+  await chooser.setFiles({ name: 'locandina.jpg', mimeType: 'image/jpeg', buffer: buf });
+  await page.waitForFunction(() => [...document.querySelectorAll('input')].some((i) => i.value === 'FESTA DELLA ZUCCA'), null, { timeout: 15000 });
+  assert.equal(await page.getByLabel('Data di inizio').inputValue(), '2026-12-05');
+  assert.equal(await page.getByLabel('Ora di inizio').inputValue(), '18:00');
+  assert.equal(await page.locator('.sheet img.thumb').count(), 1);
+  assert.match(await page.locator('.sheet .warn').first().innerText(), /OCR gratuito/);
+  assert.match(await page.getByLabel('Descrizione').inputValue(), /FESTA DELLA ZUCCA/);
+  await page.screenshot({ path: `${SHOTS}/form-foto.png` });
+});
+await step('foto: l\'anteprima si ingrandisce e si richiude con "indietro"', async () => {
+  await page.locator('.sheet img.thumb').click();
+  await page.waitForSelector('img.thumb-full');
+  await page.goBack();
+  await page.waitForFunction(() => !document.querySelector('img.thumb-full'));
+  assert.equal(await page.locator('.sheet').count(), 1);   // la scheda dell'evento resta aperta
+});
+await step('foto: salva, vede il tag "locandina" e riapre l\'anteprima dalla scheda', async () => {
+  await sheet().getByRole('button', { name: 'Salva' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  await page.locator('.cal-cell[data-date="2026-12-05"]').click().catch(() => {});
+  await page.locator('details.sec[data-id="next"] > summary').click();
+  await page.waitForFunction(() => /locandina/.test(document.querySelector('details.sec[data-id="next"]').innerText));
+  await page.locator('details.sec[data-id="next"] .row', { hasText: 'FESTA DELLA ZUCCA' }).locator('.main').click();
+  await page.waitForSelector('.sheet img.thumb', { timeout: 8000 });
+  await page.locator('.sheet img.thumb').click();
+  await page.waitForSelector('img.thumb-full');
+  await page.goBack();
+  await page.waitForFunction(() => !document.querySelector('img.thumb-full'));
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  assert.match(page.url(), /index\.html$/);
+});
+await step('foto: se il lettore di testo non si scarica, la scheda si apre lo stesso con la foto', async () => {
+  await page.evaluate(() => { delete window.Tesseract; });
+  const buf = await fakeJpeg();
+  await page.click('#fab'); await page.getByRole('button', { name: /Evento da foto o locandina/ }).click();
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: /Scegli dalla galleria/ }).click()]);
+  await chooser.setFiles({ name: 'locandina.jpg', mimeType: 'image/jpeg', buffer: buf });
+  await page.waitForSelector('.sheet-head h2:has-text("Nuovo evento")', { timeout: 40000 });
+  assert.match(await page.locator('.sheet .warn').first().innerText(), /Non sono riuscito a leggere il testo/);
+  assert.equal(await page.locator('.sheet img.thumb').count(), 1);
+  assert.equal(await page.getByLabel('Titolo *').inputValue(), '');
+  await page.locator('.sheet .sheet-head .icon-btn').click();
+  await sheet().getByRole('button', { name: /Chiudi senza salvare/ }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+});
+await step('foto: annullare la lettura non apre nulla', async () => {
+  await page.evaluate(() => { window.Tesseract = { createWorker: async () => { await new Promise((r) => setTimeout(r, 1500)); return { recognize: async () => ({ data: { text: 'TESTO LENTO\nSabato 5 dicembre 2026' } }), terminate: async () => {} }; } }; });
+  const buf = await fakeJpeg();
+  await page.click('#fab'); await page.getByRole('button', { name: /Evento da foto o locandina/ }).click();
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: /Scegli dalla galleria/ }).click()]);
+  await chooser.setFiles({ name: 'locandina.jpg', mimeType: 'image/jpeg', buffer: buf });
+  await page.waitForSelector('.sheet-head h2:has-text("Leggo la locandina")');
+  await page.locator('.sheet .sheet-head .icon-btn').click();
+  await page.waitForTimeout(2500);
+  assert.equal(await page.locator('.sheet').count(), 0);
+});
+await step('link di Facebook da solo: scheda senza titolo inventato e con istruzioni chiare', async () => {
+  await addMenu('Evento da link o testo');
+  await page.locator('.sheet textarea').fill('https://www.facebook.com/events/998877665/');
+  await sheet().getByRole('button', { name: 'Leggi' }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("Nuovo evento")');
+  assert.equal(await page.getByLabel('Titolo *').inputValue(), '');
+  assert.match(await page.getByLabel('Link dell\'evento').inputValue(), /facebook\.com\/events\/998877665/);
+  assert.match(await page.locator('.sheet .warn').first().innerText(), /Facebook e Instagram non permettono/);
+  await page.locator('.sheet .sheet-head .icon-btn').click();
+  await sheet().getByRole('button', { name: /Chiudi senza salvare/ }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+});
+await step('Google Maps: testo condiviso → scelta tra più posti → scheda con nome, indirizzo e posizione', async () => {
+  nominatimLog.length = 0;
+  const shared = 'Bar Centrale\nVia Roma 1, 36061 Bassano del Grappa VI\nhttps://maps.app.goo.gl/AbCdEf123';
+  await page.goto(URL_APP + '?text=' + encodeURIComponent(shared), { waitUntil: 'load' });
+  await page.waitForSelector('.sheet-head h2:has-text("Quale di questi posti è?")', { timeout: 15000 });
+  assert.equal(nominatimLog[0], 'Via Roma 1, 36061 Bassano del Grappa');     // indirizzo ripulito dalla sigla della provincia
+  assert.equal(await page.locator('.sheet .menu-list .btn').count(), 3);     // 2 posti + "Nessuno di questi"
+  await page.locator('.sheet .menu-list .btn').first().click();
+  await page.waitForSelector('.sheet-head h2:has-text("Nuovo luogo")');
+  assert.equal(await page.getByLabel('Nome *').inputValue(), 'Bar Centrale');
+  assert.match(await page.locator('.sheet').last().innerText(), /45\.76640, 11\.73540/);
+  assert.match(await page.locator('.sheet .warn').first().innerText(), /scelta da te/);
+  assert.equal(new URL(page.url()).search, '');                               // il testo condiviso non resta nell'indirizzo
+  await sheet().getByRole('button', { name: 'Salva' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+});
+await step('Google Maps: coordinate incollate → posizione esatta, senza interrogare nessun servizio', async () => {
+  nominatimLog.length = 0;
+  await addMenu('Link di Google Maps');
+  await page.locator('.sheet textarea').fill('Bar Alpino\n45.76540, 11.73450');
+  await sheet().getByRole('button', { name: 'Crea il luogo' }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("Nuovo luogo")');
+  assert.equal(await page.getByLabel('Nome *').inputValue(), 'Bar Alpino');
+  assert.match(await page.locator('.sheet').last().innerText(), /45\.76540, 11\.73450/);
+  assert.match(await page.locator('.sheet .warn').first().innerText(), /coordinate/);
+  assert.deepEqual(nominatimLog, []);
+  await sheet().getByRole('button', { name: 'Salva' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+});
+await step('Google Maps: link breve senza nome né indirizzo → spiegazione chiara', async () => {
+  await addMenu('Link di Google Maps');
+  await page.locator('.sheet textarea').fill('https://maps.app.goo.gl/SoloLink99');
+  await sheet().getByRole('button', { name: 'Crea il luogo' }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("Nuovo luogo")');
+  assert.match(await page.locator('.sheet .warn').first().innerText(), /coordinate/);
+  await page.locator('.sheet .sheet-head .icon-btn').click();
+  await sheet().getByRole('button', { name: /Chiudi senza salvare/ }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+});
+await step('Impostazioni: mostra versione e novità', async () => {
+  await page.click('#btnSettings');
+  await page.waitForSelector('.sheet-head h2:has-text("Impostazioni")');
+  assert.match(await sheet().innerText(), /Versione \d+\.\d+\.\d+/);
+  await sheet().locator('details.fold summary').click();
+  assert.match(await sheet().innerText(), /Prima versione/);
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+});
+await step('aspetto: sfondo a tramonto, tema chiaro, nessun filtro scuro sulla mappa', async () => {
+  const css = await page.evaluate(() => ({
+    bodyBg: getComputedStyle(document.body).backgroundColor,
+    scheme: getComputedStyle(document.documentElement).colorScheme,
+    before: getComputedStyle(document.body, '::before').backgroundImage,
+    text: getComputedStyle(document.body).color,
+  }));
+  assert.match(css.scheme, /light/);
+  assert.match(css.before, /gradient/);
+  assert.equal(css.bodyBg, 'rgba(0, 0, 0, 0)');
+  const filt = await page.evaluate(() => { const d = document.createElement('div'); d.className = 'leaflet-tile-pane'; document.body.append(d); const f = getComputedStyle(d).filter; d.remove(); return f; });
+  assert.equal(filt, 'none');
+});
+
 await page.screenshot({ path: `${SHOTS}/home.png`, fullPage: false });
 await page.screenshot({ path: `${SHOTS}/home-full.png`, fullPage: true });
 

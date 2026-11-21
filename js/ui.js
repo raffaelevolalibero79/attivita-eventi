@@ -39,31 +39,38 @@ export function toast(msg, kind = '') {
 
 // ---------- finestre a scorrimento dal basso (il tasto "indietro" di Android le chiude) ----------
 const stack = [];
-let sentinel = false;
-let ignorePop = 0;
+let sentinel = false;   // true = nella cronologia c'è una voce "segnaposto" per le finestre aperte
+let backs = 0;          // "indietro" chiesti dall'app (per togliere il segnaposto) e non ancora arrivati
 
+const pushSentinel = () => { history.pushState({ ae: 1 }, ''); sentinel = true; };
 function ensureSentinel() {
-  if (!sentinel) { history.pushState({ ae: 1 }, ''); sentinel = true; }
+  if (sentinel) return;
+  if (backs) return;    // il vecchio segnaposto sta per essere tolto: il nuovo si mette appena l'"indietro" è arrivato (vedi sotto)
+  pushSentinel();
 }
 function releaseSentinel() {
   setTimeout(() => {
-    if (!stack.length && sentinel) { sentinel = false; ignorePop++; history.back(); }
+    if (!stack.length && sentinel) { sentinel = false; backs++; history.back(); }
   }, 0);
 }
 addEventListener('popstate', () => {
-  if (ignorePop) { ignorePop--; return; }
+  if (backs) {
+    backs--;
+    if (!backs && stack.length && !sentinel) pushSentinel();   // nel frattempo si è aperta un'altra finestra
+    return;
+  }
   if (!sentinel) return;
   sentinel = false;
   const top = stack[stack.length - 1];
   if (top) {
     if (top.guard && top.guard()) {
-      history.pushState({ ae: 1 }, ''); sentinel = true;
+      pushSentinel();
       askDiscard().then((ok) => { if (ok) top.api.forceClose(); });
       return;
     }
     top.dispose();
   }
-  if (stack.length) { history.pushState({ ae: 1 }, ''); sentinel = true; }
+  if (stack.length) pushSentinel();
 });
 const askDiscard = () => confirmDialog('Ci sono modifiche non salvate. Chiudere senza salvare?', { ok: 'Chiudi senza salvare', cancel: 'Continua a modificare', danger: true });
 
@@ -142,6 +149,18 @@ export function downloadText(filename, text, mime = 'application/json') {
   document.body.append(a);
   a.click();
   setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1000);
+}
+// Anteprima ingrandita (a tutta larghezza). Si chiude con ✕, toccando fuori o con il tasto indietro.
+export function openImage(src, title = 'Locandina') {
+  return openSheet({ title, body: el('img', { class: 'thumb-full', src, alt: title }) });
+}
+// Immagine piccola che si tocca per ingrandirla
+export function thumbImg(src, alt = 'Anteprima della locandina') {
+  const img = el('img', { class: 'thumb', src, alt, role: 'button', tabindex: '0', title: 'Tocca per ingrandire' });
+  const open = () => openImage(src, alt);
+  img.addEventListener('click', open);
+  img.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  return img;
 }
 export function pickFile(accept, capture) {
   return new Promise((resolve) => {

@@ -259,13 +259,54 @@ export function parseMapsUrl(raw) {
   return out;
 }
 
-// Testo condiviso da Google Maps: nome, indirizzo e link. Restituisce righe utili e link.
+// Coordinate scritte nel testo, come le copia Google Maps tenendo premuto su un punto: "45.76540, 11.73450".
+// Servono almeno 3 decimali (così un indirizzo o un numero qualsiasi non viene scambiato per coordinate).
+const COORD_RE = /(-?\d{1,2}\.\d{3,})\s*°?\s*[,;]?\s+(-?\d{1,3}\.\d{3,})|(-?\d{1,2}\.\d{3,})\s*°?\s*[,;]\s*(-?\d{1,3}\.\d{3,})/;
+export function parseCoords(text) {
+  let s = String(text || '');
+  for (const u of extractUrls(s)) s = s.replace(u, ' ');
+  const m = new RegExp(COORD_RE).exec(s);
+  if (!m) return null;
+  const lat = +(m[1] ?? m[3]), lng = +(m[2] ?? m[4]);
+  return inRange(lat, lng) ? { lat, lng } : null;
+}
+
+// Nomi che Google Maps mette al posto del nome quando il punto non ha un nome vero
+const GENERIC_NAME = /^(posizione|luogo|punto)\s+(condivis[oa]|selezionat[oa]|sulla mappa)|^(dropped pin|shared (location|place)|pin)|^(posizione|location)$/i;
+
+// Testo condiviso da Google Maps: nome, indirizzo e link. Restituisce nome, indirizzo e link.
+//   "Bar Centrale\nVia Roma 1, 36061 Bassano del Grappa VI\nhttps://maps.app.goo.gl/xxxx"
+//   "Bar Centrale, Via Roma 1, Bassano del Grappa"  (tutto su una riga)
 export function parseSharedPlaceText(text) {
   const urls = extractUrls(text);
   let body = String(text || '');
-  for (const u of urls) body = body.replace(u, '');
-  const lines = body.split(/\n/).map((l) => l.trim()).filter(Boolean);
-  return { urls, name: lines[0] || '', address: lines.slice(1).join(', ') };
+  for (const u of urls) body = body.split(u).join('\n');
+  body = body.replace(new RegExp(COORD_RE.source, 'g'), '\n');   // le coordinate non sono un nome
+  let lines = body.split(/\n/).map((l) => l.replace(/^[\s·•\-–—]+|[\s·•\-–—]+$/g, '').trim()).filter(Boolean);
+  lines = lines.filter((l, i) => lines.indexOf(l) === i);        // il titolo e il testo spesso si ripetono
+  let name = lines[0] || '', address = lines.slice(1).join(', ');
+  if (GENERIC_NAME.test(name)) { name = ''; address = lines.slice(1).join(', '); if (!address && lines[0] && !GENERIC_NAME.test(lines[0])) address = lines[0]; }
+  if (name && !address && name.includes(',')) {
+    const i = name.indexOf(',');
+    const rest = name.slice(i + 1).trim();
+    if (rest && (/\d/.test(rest) || rest.includes(','))) { address = rest; name = name.slice(0, i).trim(); }
+  }
+  return { urls, name: name.slice(0, 200), address: address.slice(0, 300) };
+}
+
+// Indirizzo "da ricerca": toglie Stato, sigla della provincia e codici Plus Code, che confondono la ricerca.
+export function cleanAddress(addr) {
+  let a = String(addr || '').replace(/\b[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}\b/gi, '');
+  a = a.replace(/,?\s*\b(Italia|Italy|Italie|Italien)\b\s*$/i, '');
+  a = a.replace(/\s+\(?\b[A-Z]{2}\b\)?\s*$/, '');                // "… Bassano del Grappa VI"
+  return a.replace(/\s{2,}/g, ' ').replace(/^[\s,]+|[\s,]+$/g, '');
+}
+// Città dall'ultimo pezzo dell'indirizzo ("36061 Bassano del Grappa VI" → "Bassano del Grappa")
+export function cityFromAddress(addr) {
+  const a = cleanAddress(addr);
+  if (!a) return '';
+  const last = a.split(',').map((x) => x.trim()).filter(Boolean).pop() || '';
+  return last.replace(/^\d{4,6}\s*/, '').trim();
 }
 
 // ---------- lettura testi di locandine / didascalie (regole, in italiano) ----------
@@ -513,5 +554,7 @@ export function eventFromExtracted(x, source) {
     category: x.category, status: 'da_valutare', source,
   };
   if (x.recurrenceNote && typeof x.recurrenceNote === 'string') raw.notes = 'Ricorrenza indicata: ' + x.recurrenceNote;
-  return sanitizeDoc('events', raw);
+  const doc = sanitizeDoc('events', raw);
+  if (!String(x.title || '').trim()) doc.title = '';      // niente "Senza titolo" da cancellare: il campo resta vuoto da compilare
+  return doc;
 }
