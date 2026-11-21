@@ -249,6 +249,19 @@ await step('foto: scelta dalla galleria → si apre la scheda compilata con l\'a
   assert.match(await page.getByLabel('Descrizione').inputValue(), /FESTA DELLA ZUCCA/);
   await page.screenshot({ path: `${SHOTS}/form-foto.png` });
 });
+await step('foto: tasto "Condividi foto" nella scheda e nell\'anteprima ingrandita', async () => {
+  await page.evaluate(() => { window.__shared = []; navigator.canShare = () => true; navigator.share = async (d) => { window.__shared.push({ name: d.files[0].name, type: d.files[0].type, size: d.files[0].size }); }; });
+  await sheet().getByRole('button', { name: /Condividi foto/ }).click();
+  await page.waitForFunction(() => window.__shared.length === 1);
+  const one = await page.evaluate(() => window.__shared[0]);
+  assert.equal(one.type, 'image/jpeg'); assert.match(one.name, /\.jpg$/); assert.ok(one.size > 500);
+  await page.locator('.sheet img.thumb').click();
+  await page.waitForSelector('img.thumb-full');
+  await sheet().getByRole('button', { name: /Condividi foto/ }).click();
+  await page.waitForFunction(() => window.__shared.length === 2);
+  await page.goBack();
+  await page.waitForFunction(() => !document.querySelector('img.thumb-full'));
+});
 await step('foto: l\'anteprima si ingrandisce e si richiude con "indietro"', async () => {
   await page.locator('.sheet img.thumb').click();
   await page.waitForSelector('img.thumb-full');
@@ -264,6 +277,7 @@ await step('foto: salva, vede il tag "locandina" e riapre l\'anteprima dalla sch
   await page.waitForFunction(() => /locandina/.test(document.querySelector('details.sec[data-id="next"]').innerText));
   await page.locator('details.sec[data-id="next"] .row', { hasText: 'FESTA DELLA ZUCCA' }).locator('.main').click();
   await page.waitForSelector('.sheet img.thumb', { timeout: 8000 });
+  assert.equal(await page.locator('.sheet').last().getByRole('button', { name: /Condividi foto/ }).count(), 1);   // anche nella scheda salvata
   await page.locator('.sheet img.thumb').click();
   await page.waitForSelector('img.thumb-full');
   await page.goBack();

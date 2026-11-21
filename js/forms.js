@@ -1,5 +1,5 @@
 // forms.js — moduli (luogo, evento, viaggio) e schede di dettaglio.
-import { el, clear, openSheet, toast, confirmDialog, chip, field, select, thumbImg } from './ui.js';
+import { el, clear, openSheet, toast, confirmDialog, chip, field, select, thumbBlock } from './ui.js';
 import * as U from './util.js';
 import { geocodePlace, reverseGeocode, getPosition } from './geo.js';
 import { eventRow, placeRow } from './sections.js';
@@ -165,7 +165,7 @@ export function openEventForm(ctx, draft = {}, { isNew = true, thumb = null, not
 
   const drawThumb = () => {
     clear(thumbBox);
-    if (state.thumb) thumbBox.append(el('div', { class: 'lbl', text: 'Locandina (tocca per ingrandire)' }), thumbImg(state.thumb));
+    if (state.thumb) thumbBox.append(el('div', { class: 'lbl', text: 'Locandina (tocca per ingrandire)' }), thumbBlock(state.thumb, title.value || 'Locandina'));
   };
   const drawNote = (t, kind = 'warn') => { clear(noteBox); if (t) noteBox.append(el('div', { class: kind, text: t })); };
   drawThumb(); drawNote(note);
@@ -335,7 +335,7 @@ export function openEventDetail(ctx, id, occDate) {
     }
     if (ev.hasThumb) {
       const holder = el('div', null, el('div', { class: 'hint', text: 'Carico l\'anteprima…' }));
-      ctx.store.getThumb(ev.id).then((img) => { clear(holder); if (img) holder.append(el('div', { class: 'lbl', text: 'Locandina (tocca per ingrandire)' }), thumbImg(img)); else holder.append(el('div', { class: 'hint', text: 'L\'anteprima della locandina non è disponibile (non ancora sincronizzata o rimossa).' })); });
+      ctx.store.getThumb(ev.id).then((img) => { clear(holder); if (img) holder.append(el('div', { class: 'lbl', text: 'Locandina (tocca per ingrandire)' }), thumbBlock(img, ev.title)); else holder.append(el('div', { class: 'hint', text: 'L\'anteprima della locandina non è disponibile (non ancora sincronizzata o rimossa).' })); });
       out.push(holder);
     }
     return out;

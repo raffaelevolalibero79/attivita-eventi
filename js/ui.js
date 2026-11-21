@@ -152,7 +152,43 @@ export function downloadText(filename, text, mime = 'application/json') {
 }
 // Anteprima ingrandita (a tutta larghezza). Si chiude con ✕, toccando fuori o con il tasto indietro.
 export function openImage(src, title = 'Locandina') {
-  return openSheet({ title, body: el('img', { class: 'thumb-full', src, alt: title }) });
+  return openSheet({ title, body: [el('img', { class: 'thumb-full', src, alt: title }), shareImageBar(src, title)] });
+}
+
+// ---------- condividere una foto (anteprima della locandina) ----------
+// L'anteprima è già stata ricodificata dall'app: non contiene posizione GPS né altri dati nascosti della foto originale.
+function dataUrlToFile(src, name) {
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(src || ''));
+  if (!m) return null;
+  const bin = atob(m[2]); const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  const ext = m[1] === 'image/png' ? 'png' : m[1] === 'image/webp' ? 'webp' : 'jpg';
+  return new File([u], `${name}.${ext}`, { type: m[1] });
+}
+const fileSafe = (t) => String(t || 'locandina').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'locandina';
+export async function shareImage(src, title = 'Locandina') {
+  let file = null;
+  try { file = dataUrlToFile(src, fileSafe(title)); } catch { file = null; }
+  if (!file) { toast('Non riesco a preparare la foto da condividere.', 'error'); return; }
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: String(title).slice(0, 100) }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; /* altrimenti ripiego: salvo il file */ }
+  saveFile(file);
+  toast('Questo telefono non apre il menu di condivisione: ho salvato la foto nei download.');
+}
+export function saveFile(file) {
+  const url = URL.createObjectURL(file);
+  const a = el('a', { href: url, download: file.name });
+  document.body.append(a); a.click();
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1000);
+}
+export function shareImageBar(src, title) {
+  return el('div', { class: 'seg', style: { marginTop: '10px' } },
+    el('button', { type: 'button', class: 'btn small', text: '📤 Condividi foto', onclick: () => shareImage(src, title) }));
+}
+// Foto con il suo tasto di condivisione sotto (si tocca la foto per ingrandirla)
+export function thumbBlock(src, title = 'Locandina') {
+  return el('div', { class: 'thumb-block' }, thumbImg(src, `Anteprima: ${title}`), shareImageBar(src, title));
 }
 // Immagine piccola che si tocca per ingrandirla
 export function thumbImg(src, alt = 'Anteprima della locandina') {

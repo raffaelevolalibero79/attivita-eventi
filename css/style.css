@@ -202,3 +202,4 @@ ul.news li { margin: 3px 0; }
 .gate p { color: #3d322a; }
 
 .pop-btn.alt { background: #fff; color: var(--accent); border: 1px solid var(--accent); margin-top: 6px; }
+.thumb-block { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }

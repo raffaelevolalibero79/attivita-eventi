@@ -3,9 +3,12 @@
 //   • secondo numero = funzione nuova o cambiata in modo visibile
 //   • terzo numero  = piccola correzione
 // Il numero va tenuto uguale anche in sw.js (lo controlla il test automatico).
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.2.1';
 export const APP_DATE = '2026-11-21';
 export const CHANGELOG = [
+  { v: '1.2.1', d: '2026-11-21', items: [
+    'Tasto "Condividi foto" su tutte le locandine: nella scheda dell\'evento, nella bozza da foto e nell\'anteprima ingrandita. Si invia solo la foto ridotta, senza posizione GPS né dati nascosti.',
+  ] },
   { v: '1.2.0', d: '2026-11-21', items: [
     'Nuovo pulsante "Condividi / Naviga" su luoghi ed eventi con posizione (anche nel fumetto sulla mappa): Waze, WhatsApp, Google Maps, altre app di mappe, condivisione Android e copia delle coordinate.',
     'Viene inviata solo la posizione (nome, indirizzo, punto sulla mappa), mai le note personali.',
