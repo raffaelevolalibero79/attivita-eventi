@@ -238,7 +238,7 @@ async function main() {
   if (params.has('title') || params.has('text') || params.has('url')) {
     const incoming = [params.get('title'), params.get('text'), params.get('url')].filter(Boolean).join('\n').slice(0, 20000);
     history.replaceState(null, '', location.pathname);
-    if (incoming.trim()) setTimeout(() => ctx.handleIncoming(incoming).catch((e) => toast(e.message, 'error')), 300);
+    if (incoming.trim()) setTimeout(() => ctx.handleIncoming(incoming).catch((e) => { console.error('Condivisione non riuscita:', e); toast(e.message, 'error'); }), 300);
   }
 
   if ('serviceWorker' in navigator) {

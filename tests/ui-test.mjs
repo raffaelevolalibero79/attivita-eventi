@@ -312,7 +312,15 @@ await step('link di Facebook da solo: scheda senza titolo inventato e con istruz
 await step('Google Maps: testo condiviso → scelta tra più posti → scheda con nome, indirizzo e posizione', async () => {
   nominatimLog.length = 0;
   const shared = 'Bar Centrale\nVia Roma 1, 36061 Bassano del Grappa VI\nhttps://maps.app.goo.gl/AbCdEf123';
-  await page.goto(URL_APP + '?text=' + encodeURIComponent(shared), { waitUntil: 'load' });
+  const target = URL_APP + '?text=' + encodeURIComponent(shared);
+  // La finestra chiusa nel passaggio prima fa un "indietro" del browser che può finire un attimo dopo: aspetto che sia finito
+  // (e, se la richiesta viene annullata, riprovo), come fa un telefono quando apre l'app da "Condividi" a pagina nuova.
+  await page.waitForTimeout(700);
+  const chooser = '.sheet-head h2:has-text("Quale di questi posti è?")';
+  for (let k = 0; k < 3; k++) {
+    try { await page.goto(target, { waitUntil: 'load' }); } catch (e) { if (!/ERR_ABORTED/.test(e.message)) throw e; }
+    try { await page.waitForSelector(chooser, { timeout: 5000 }); break; } catch (e) { if (k === 2) throw e; }
+  }
   await page.waitForSelector('.sheet-head h2:has-text("Quale di questi posti è?")', { timeout: 15000 });
   assert.equal(nominatimLog[0], 'Via Roma 1, 36061 Bassano del Grappa');     // indirizzo ripulito dalla sigla della provincia
   assert.equal(await page.locator('.sheet .menu-list .btn').count(), 3);     // 2 posti + "Nessuno di questi"
@@ -336,6 +344,26 @@ await step('Google Maps: coordinate incollate → posizione esatta, senza interr
   assert.match(await page.locator('.sheet .warn').first().innerText(), /coordinate/);
   assert.deepEqual(nominatimLog, []);
   await sheet().getByRole('button', { name: 'Salva' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+});
+await step('Condividi / Naviga: Waze, WhatsApp, Google Maps, altre app e copia coordinate', async () => {
+  await page.evaluate(() => { const d = document.querySelector('details.sec[data-id="places"]'); d.open = true; });
+  await page.waitForFunction(() => /Bar Alpino/.test(document.querySelector('details.sec[data-id="places"]').innerText));
+  await page.locator('details.sec[data-id="places"]').getByText('Bar Alpino').first().click();
+  await page.waitForSelector('.sheet-head h2:has-text("Bar Alpino")');
+  await sheet().getByRole('button', { name: /Condividi \/ Naviga/ }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("Condividi o naviga")');
+  const hrefs = await page.locator('.sheet').last().locator('a').evaluateAll((as) => as.map((a) => a.getAttribute('href')));
+  assert.ok(hrefs.some((h) => h === 'https://waze.com/ul?ll=45.765400,11.734500&navigate=yes'), 'Waze');
+  assert.ok(hrefs.some((h) => h.startsWith('https://wa.me/?text=') && decodeURIComponent(h).includes('Bar Alpino') && decodeURIComponent(h).includes('45.765400,11.734500')), 'WhatsApp');
+  assert.ok(hrefs.some((h) => h === 'https://www.google.com/maps/dir/?api=1&destination=45.765400,11.734500'), 'Google Maps');
+  assert.ok(hrefs.some((h) => h.startsWith('geo:45.765400,11.734500?q=')), 'geo');
+  assert.match(await sheet().innerText(), /non le tue note/);
+  // "indietro" chiude solo la finestra di condivisione e lascia la scheda
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 1);
+  assert.match(await page.locator('.sheet-head h2').last().innerText(), /Bar Alpino/);
+  await page.goBack();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
 });
 await step('Google Maps: link breve senza nome né indirizzo → spiegazione chiara', async () => {

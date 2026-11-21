@@ -3,6 +3,7 @@ import { el, clear, openSheet, toast, confirmDialog, chip, field, select, thumbI
 import * as U from './util.js';
 import { geocodePlace, reverseGeocode, getPosition } from './geo.js';
 import { eventRow, placeRow } from './sections.js';
+import { shareButton } from './share.js';
 
 const catOf = (c) => U.CATEGORIES[c] || U.CATEGORIES.attivita;
 const text = (v, ph, extra) => el('input', { type: 'text', value: v || '', placeholder: ph || '', autocomplete: 'off', ...(extra || {}) });
@@ -323,6 +324,7 @@ export function openEventDetail(ctx, id, occDate) {
     const acts = [extLink(ev.link, '🔗 Apri il link dell\'evento')];
     if (Number.isFinite(ev.lat)) acts.push(el('button', { type: 'button', class: 'btn small', text: '🗺️ Mostra sulla mappa', onclick: () => { sh.forceClose(); ctx.showOnMap(ev.lat, ev.lng); } }));
     if (Number.isFinite(ev.lat)) acts.push(el('a', { class: 'btn small', target: '_blank', rel: 'noopener noreferrer', href: `https://www.openstreetmap.org/?mlat=${ev.lat}&mlon=${ev.lng}#map=17/${ev.lat}/${ev.lng}`, text: '↗ Apri in OpenStreetMap' }));
+    acts.push(shareButton({ title: ev.venue || ev.title, address: ev.address, lat: ev.lat, lng: ev.lng }));
     out.push(el('div', { class: 'seg' }, acts));
     if (ev.rec && ev.rec.freq !== 'none' && occDate) {
       out.push(el('button', { type: 'button', class: 'btn small', text: `Salta solo questa data (${U.formatDateIt(occDate, false)})`, onclick: async () => {
@@ -363,6 +365,7 @@ export function openPlaceDetail(ctx, id) {
     if (Number.isFinite(p.lat)) {
       acts.push(el('button', { type: 'button', class: 'btn small', text: '🗺️ Mostra sulla mappa', onclick: () => { sh.forceClose(); ctx.showOnMap(p.lat, p.lng); } }));
       acts.push(el('a', { class: 'btn small', target: '_blank', rel: 'noopener noreferrer', href: `https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lng}#map=17/${p.lat}/${p.lng}`, text: '↗ Apri in OpenStreetMap' }));
+      acts.push(shareButton({ name: p.name, address: p.address, lat: p.lat, lng: p.lng }));
     }
     out.push(el('div', { class: 'seg' }, acts));
     return out;

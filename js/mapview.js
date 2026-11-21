@@ -3,6 +3,7 @@
 // con controllo di integrità (SRI): se il file scaricato non coincide con quello atteso, il browser lo rifiuta.
 import { el, clear } from './ui.js';
 import { CATEGORIES, STATUSES } from './util.js';
+import { openShareSheet } from './share.js';
 
 const V = '1.9.4';
 const CDN = {
@@ -74,7 +75,8 @@ export async function createMapView(container, { buttonsHost, bannerHost, onOpen
         const pop = el('div', null,
           el('div', { class: 'pop-title', text: `${CATEGORIES[catKey(it.category)].icon} ${it.title}` }),
           el('div', { text: it.subtitle || '' }),
-          el('button', { class: 'pop-btn', text: 'Apri scheda', onclick: () => { map.closePopup(); onOpen(it); } }));
+          el('button', { class: 'pop-btn', text: 'Apri scheda', onclick: () => { map.closePopup(); onOpen(it); } }),
+          el('button', { class: 'pop-btn alt', text: '📤 Condividi / Naviga', onclick: () => openShareSheet({ name: it.title, address: it.subtitle, lat: it.lat, lng: it.lng }) }));
         m.bindPopup(pop, { closeButton: true, autoPanPadding: [30, 60] });
         m.addTo(layer);
         pts.push([it.lat, it.lng]);

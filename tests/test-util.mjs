@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import * as U from '../js/util.js';
 import { readFileSync } from 'node:fs';
 import { APP_VERSION, CHANGELOG } from '../js/version.js';
+import { locationLinks, hasLocation } from '../js/sharelinks.js';
 
 let n = 0;
 const t = (name, fn) => { try { fn(); n++; console.log('ok  ', name); } catch (e) { console.error('FAIL', name, '\n  ', e.message); process.exitCode = 1; } };
@@ -194,5 +195,19 @@ t('indirizzo ripulito per la ricerca', () => {
   assert.equal(U.cleanAddress('FRM4+23 Bassano del Grappa, Via Roma 1'), 'Bassano del Grappa, Via Roma 1');
   assert.equal(U.cityFromAddress('Via Roma 1, 36061 Bassano del Grappa VI'), 'Bassano del Grappa');
   assert.equal(U.cityFromAddress(''), '');
+});
+t('condividi posizione: link costruiti solo da numeri e testo codificato', () => {
+  const L = locationLinks({ name: 'Bar "Alpino" (centro)', address: 'Via Roma 1, Bassano', lat: 45.7654, lng: 11.7345 });
+  assert.equal(L.waze, 'https://waze.com/ul?ll=45.765400,11.734500&navigate=yes');
+  assert.equal(L.gmapsNav, 'https://www.google.com/maps/dir/?api=1&destination=45.765400,11.734500');
+  assert.ok(L.geo.startsWith('geo:45.765400,11.734500?q=45.765400,11.734500('));
+  assert.ok(!/[()]/.test(L.geo.slice(L.geo.indexOf('(') + 1, -1)));
+  assert.ok(decodeURIComponent(L.whatsapp).includes('Via Roma 1, Bassano'));
+  assert.equal(locationLinks({ name: 'x', lat: null, lng: 11 }), null);
+  assert.equal(locationLinks({ name: 'x', lat: '45', lng: '11' }), null);   // testo non valido: niente link
+  assert.equal(locationLinks({ name: 'x', lat: 95, lng: 11 }), null);
+  assert.equal(hasLocation({ lat: 45.1, lng: 11.1 }), true);
+  const bad = locationLinks({ name: 'a&b=c#d\nhttps://evil', lat: 1, lng: 2 });
+  assert.ok(!bad.waze.includes('evil') && !bad.gmapsNav.includes('evil'));
 });
 console.log(`\n${n} test superati`);

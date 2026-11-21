@@ -1,11 +1,11 @@
 // Service worker: tiene una copia dei file dell'app per aprirla anche senza rete.
 // Non intercetta mai Firebase, Anthropic, OpenStreetMap (ricerca) né le mappe: passano direttamente.
-const VERSION = '1.1.0';   // = APP_VERSION in js/version.js (controllato dal test)
+const VERSION = '1.2.0';   // = APP_VERSION in js/version.js (controllato dal test)
 const CACHE = `attivita-eventi-${VERSION}`;
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
   './js/app.js', './js/util.js', './js/config.js', './js/store.js', './js/ui.js', './js/geo.js',
-  './js/version.js', './js/mapview.js', './js/calendar.js', './js/forms.js', './js/sections.js', './js/capture.js', './js/settings.js',
+  './js/version.js', './js/mapview.js', './js/calendar.js', './js/forms.js', './js/sections.js', './js/capture.js', './js/settings.js', './js/share.js', './js/sharelinks.js',
   './icons/icon-192.png', './icons/icon-512.png',
 ];
 const CDN_OK = ['https://unpkg.com/', 'https://www.gstatic.com/firebasejs/', 'https://cdn.jsdelivr.net/'];

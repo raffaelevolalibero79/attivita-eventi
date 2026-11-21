@@ -200,3 +200,5 @@ ul.news li { margin: 3px 0; }
 .leaflet-container { background: #e9e4da; }
 .gate { background: linear-gradient(180deg, #86b0dc, #f5cf9f 70%, #f4a766); }
 .gate p { color: #3d322a; }
+
+.pop-btn.alt { background: #fff; color: var(--accent); border: 1px solid var(--accent); margin-top: 6px; }
