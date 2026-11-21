@@ -59,11 +59,12 @@ async function main() {
 
   // ---------- stato e filtri ----------
   const filters = loadFilters();
-  let data = { allEvents: [], allPlaces: [], trips: [], fEvents: [], fPlaces: [] };
+  let data = { allEvents: [], allPlaces: [], trips: [], fEvents: [], calEvents: [], fPlaces: [] };
   let stale = true;   // true = i dati filtrati vanno ricalcolati prima di essere usati
   store.onChange(() => { stale = true; });   // registrato per primo: le schede aperte leggono sempre dati aggiornati
 
   const text = (...v) => v.filter(Boolean).join(' ').toLowerCase();
+  const evText = (e) => text(e.title, e.venue, e.address, e.description, e.organizer, e.notes);
   function applyFilters() {
     stale = false;
     const s = store.state;
@@ -76,7 +77,9 @@ async function main() {
     const okQ = (hay) => !q || hay.includes(q);
     data = {
       allEvents: s.events, allPlaces: s.places, trips: s.trips,
-      fEvents: s.events.filter((e) => okCat(e) && okSt(e) && okTrip(e) && okKm(e) && okQ(text(e.title, e.venue, e.address, e.description, e.organizer, e.notes))),
+      fEvents: s.events.filter((e) => okCat(e) && okSt(e) && okTrip(e) && okKm(e) && okQ(evText(e))),
+      // Il calendario mostra sempre ogni evento con una data, qualunque sia il suo stato (il filtro "stato" non lo nasconde)
+      calEvents: s.events.filter((e) => okCat(e) && okTrip(e) && okKm(e) && okQ(evText(e))),
       fPlaces: s.places.filter((p) => okCat(p) && okSt(p) && okTrip(p) && okKm(p) && okQ(text(p.name, p.address, p.description, p.notes))),
     };
   }
@@ -101,7 +104,7 @@ async function main() {
     readImage, readText,
     setStatus: (coll, item, status) => { store.put(coll, { ...item, status }); },
     afterSave: (coll, doc) => {
-      if (coll === 'events' && doc.startDate) { calendar.render(ctx.data().fEvents); calendar.goToDate(doc.startDate); }
+      if (coll === 'events' && doc.startDate) { calendar.render(ctx.data().calEvents); calendar.goToDate(doc.startDate); }
       if (Number.isFinite(doc.lat) && mapApi) mapApi.flyTo(doc.lat, doc.lng, 14);
     },
     filterTrip: (id) => { filters.trip = id; filters.more = true; renderFilters(); refresh(); toast('Mostro solo questo viaggio: togli il filtro dai "Filtri".'); },
@@ -206,7 +209,7 @@ async function main() {
     stale = true;
     raf = requestAnimationFrame(() => {
       applyFilters();
-      calendar.render(data.fEvents);
+      calendar.render(data.calEvents);
       sections.render();
       if (mapApi) mapApi.setItems(mapItems());
     });

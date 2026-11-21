@@ -43,7 +43,8 @@ await step('avvio: calendario del mese corrente, sezioni chiuse', async () => {
   assert.match(await page.locator('.cal-head h2').innerText(), /Novembre 2026/);
   assert.equal(await page.locator('.cal-cell').count(), 42);
   assert.equal(await page.locator('details.sec[open]').count(), 0);
-  assert.equal(await page.locator('details.sec').count(), 4);
+  assert.equal(await page.locator('details.sec').count(), 7);
+  assert.deepEqual(await page.locator('details.sec > summary').allInnerTexts().then((a) => a.map((t) => t.replace(/\s*\d+\s*$/, '').replace(/\s+/g, ' ').trim())), ['📅 Prossimi eventi', '❔ Da valutare', '🏛️ Da vedere', '🍽️ Mangiare', '📍 Luoghi', '🚫 Non mi interessa', '🧳 Viaggi']);
   assert.doesNotMatch(await page.locator('#sections').innerText(), /Statistiche/);
   assert.match(await page.locator('#ver').innerText(), /^v\d+\.\d+\.\d+$/);
   assert.equal(await page.locator('#gate').isHidden(), true);
@@ -151,17 +152,58 @@ await step('luogo a mano, sezioni a tendina e filtri', async () => {
   await sheet().getByRole('button', { name: /Mangiare/ }).click();
   await sheet().getByRole('button', { name: 'Salva' }).click();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
-  await page.locator('details.sec[data-id="places"] > summary').click();
-  await page.waitForFunction(() => /Osteria Al Ponte/.test(document.querySelector('details.sec[data-id="places"]').innerText));
-  assert.equal(await page.locator('details.sec[data-id="places"] .badge').innerText(), '1');
-  await page.locator('details.sec[data-id="eval"] > summary').click();
+  const secText = (id) => page.evaluate((x) => document.querySelector(`details.sec[data-id="${x}"]`).innerText, id);
+  const secOpen = (id) => page.evaluate((x) => { document.querySelector(`details.sec[data-id="${x}"]`).open = true; }, id);
+  const badge = (id) => page.locator(`details.sec[data-id="${id}"] .badge`).innerText();
+  for (const id of ['eval', 'eat', 'see', 'places', 'no', 'next']) await secOpen(id);
+  // nuovo luogo = "da valutare": compare SOLO in "Da valutare"
   await page.waitForFunction(() => /Osteria Al Ponte/.test(document.querySelector('details.sec[data-id="eval"]').innerText));
+  for (const id of ['eat', 'see', 'places', 'no']) assert.doesNotMatch(await secText(id), /Osteria Al Ponte/, `non deve stare in ${id}`);
+  // ⭐ → passa in "Mangiare" (categoria mangiare) e sparisce da "Da valutare"
+  await page.locator('details.sec[data-id="eval"] .row', { hasText: 'Osteria Al Ponte' }).getByRole('button', { name: 'Mi interessa', exact: true }).click();
+  await page.waitForFunction(() => /Osteria Al Ponte/.test(document.querySelector('details.sec[data-id="eat"]').innerText));
+  assert.doesNotMatch(await secText('eval'), /Osteria Al Ponte/);
+  assert.equal(await badge('eat'), '1');
+  for (const id of ['see', 'places', 'no']) assert.doesNotMatch(await secText(id), /Osteria Al Ponte/);
+  // ✕ → passa in "Non mi interessa"
+  await page.locator('details.sec[data-id="eat"] .row', { hasText: 'Osteria Al Ponte' }).getByRole('button', { name: 'Non mi interessa', exact: true }).click();
+  await page.waitForFunction(() => /Osteria Al Ponte/.test(document.querySelector('details.sec[data-id="no"]').innerText));
+  assert.doesNotMatch(await secText('eat'), /Osteria Al Ponte/);
+  // ✕ di nuovo → torna in "Da valutare"; poi ⭐ → "Mangiare"
+  await page.locator('details.sec[data-id="no"] .row', { hasText: 'Osteria Al Ponte' }).getByRole('button', { name: 'Non mi interessa', exact: true }).click();
+  await page.waitForFunction(() => /Osteria Al Ponte/.test(document.querySelector('details.sec[data-id="eval"]').innerText));
+  await page.locator('details.sec[data-id="eval"] .row', { hasText: 'Osteria Al Ponte' }).getByRole('button', { name: 'Mi interessa', exact: true }).click();
+  await page.waitForFunction(() => /Osteria Al Ponte/.test(document.querySelector('details.sec[data-id="eat"]').innerText));
+  // luogo di tipo "attività": da valutare → ⭐ → "Prossimi eventi" (non in Luoghi, non in Da vedere/Mangiare)
+  await addMenu('Nuovo luogo a mano');
+  await page.getByLabel('Nome *').fill('Parco Avventura');
+  await sheet().getByRole('button', { name: /Attività/ }).click();
+  await sheet().getByRole('button', { name: 'Salva' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  await page.waitForFunction(() => /Parco Avventura/.test(document.querySelector('details.sec[data-id="eval"]').innerText));
+  for (const id of ['next', 'eat', 'see', 'places', 'no']) assert.doesNotMatch(await secText(id), /Parco Avventura/, `non deve stare in ${id}`);
+  await page.locator('details.sec[data-id="eval"] .row', { hasText: 'Parco Avventura' }).getByRole('button', { name: 'Mi interessa', exact: true }).click();
+  await page.waitForFunction(() => /Parco Avventura/.test(document.querySelector('details.sec[data-id="next"]').innerText));
+  assert.doesNotMatch(await secText('eval'), /Parco Avventura/);
+  for (const id of ['eat', 'see', 'places', 'no']) assert.doesNotMatch(await secText(id), /Parco Avventura/, `non deve stare in ${id}`);
   // filtro per categoria: tolgo "Mangiare" → luogo, mercato e sagra (anche la sagra è stata riconosciuta come "mangiare") spariscono
   await page.locator('#filters .chip.cat-mangiare').click();
-  await page.waitForFunction(() => !/Osteria Al Ponte/.test(document.querySelector('details.sec[data-id="places"]').innerText));
+  await page.waitForFunction(() => !/Osteria Al Ponte/.test(document.querySelector('details.sec[data-id="eat"]').innerText));
   await page.waitForFunction(() => document.querySelectorAll('.cal-cell[data-date="2026-11-28"] .bar').length === 0);
   await page.locator('#filters .chip.cat-mangiare').click();
   await page.waitForFunction(() => document.querySelectorAll('.cal-cell[data-date="2026-11-28"] .bar').length === 2);
+});
+await step('calendario: mostra sempre tutti gli eventi con data, anche con il filtro "stato" attivo', async () => {
+  const bars = () => page.locator('.cal-cell[data-date="2026-11-28"] .bar').count();
+  const before = await bars();
+  assert.ok(before >= 1);
+  await page.evaluate(() => localStorage.setItem('ae.filters', JSON.stringify({ cats: ['mangiare', 'attivita', 'vedere'], status: 'non_interessa', km: 0 })));
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('.cal-grid');
+  assert.equal(await bars(), before);
+  await page.evaluate(() => localStorage.setItem('ae.filters', JSON.stringify({ cats: ['mangiare', 'attivita', 'vedere'], status: 'all', km: 0 })));
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('.cal-grid');
 });
 await step('viaggio: crea, aggiunge budget, valigia e itinerario', async () => {
   await page.locator('details.sec[data-id="trips"] > summary').click();
@@ -203,7 +245,7 @@ await step('backup (esporta / reimporta)', async () => {
     const j = await s.exportAll({ thumbs: true });
     return { ev: j.events.length, pl: j.places.length, tr: j.trips.length, app: j.app };
   });
-  assert.deepEqual(data, { ev: 3, pl: 1, tr: 1, app: 'attivita-eventi' });
+  assert.deepEqual(data, { ev: 3, pl: 2, tr: 1, app: 'attivita-eventi' });
   const bad = await page.evaluate(async () => {
     const { createStore } = await import('./js/store.js');
     const s = createStore(); await s.init();
@@ -273,7 +315,11 @@ await step('foto: salva, vede il tag "locandina" e riapre l\'anteprima dalla sch
   await sheet().getByRole('button', { name: 'Salva' }).click();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
   await page.locator('.cal-cell[data-date="2026-12-05"]').click().catch(() => {});
-  await page.locator('details.sec[data-id="next"] > summary').click();
+  // appena salvato è "da valutare": sta in "Da valutare" e NON in "Prossimi eventi"; con ⭐ passa in "Prossimi eventi"
+  await page.evaluate(() => { for (const id of ['eval', 'next']) document.querySelector(`details.sec[data-id="${id}"]`).open = true; });
+  await page.waitForFunction(() => /FESTA DELLA ZUCCA/.test(document.querySelector('details.sec[data-id="eval"]').innerText));
+  assert.doesNotMatch(await page.evaluate(() => document.querySelector('details.sec[data-id="next"]').innerText), /FESTA DELLA ZUCCA/);
+  await page.locator('details.sec[data-id="eval"] .row', { hasText: 'FESTA DELLA ZUCCA' }).getByRole('button', { name: 'Mi interessa', exact: true }).click();
   await page.waitForFunction(() => /locandina/.test(document.querySelector('details.sec[data-id="next"]').innerText));
   await page.locator('details.sec[data-id="next"] .row', { hasText: 'FESTA DELLA ZUCCA' }).locator('.main').click();
   await page.waitForSelector('.sheet img.thumb', { timeout: 8000 });
@@ -361,9 +407,12 @@ await step('Google Maps: coordinate incollate → posizione esatta, senza interr
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
 });
 await step('Condividi / Naviga: Waze, WhatsApp, Google Maps, altre app e copia coordinate', async () => {
-  await page.evaluate(() => { const d = document.querySelector('details.sec[data-id="places"]'); d.open = true; });
-  await page.waitForFunction(() => /Bar Alpino/.test(document.querySelector('details.sec[data-id="places"]').innerText));
-  await page.locator('details.sec[data-id="places"]').getByText('Bar Alpino').first().click();
+  await page.evaluate(() => { for (const id of ['eval', 'see']) document.querySelector(`details.sec[data-id="${id}"]`).open = true; });
+  await page.waitForFunction(() => /Bar Alpino/.test(document.querySelector('details.sec[data-id="eval"]').innerText));
+  // segnaposto importato da Google Maps (categoria "da vedere"): ⭐ → riquadro "Da vedere"
+  await page.locator('details.sec[data-id="eval"] .row', { hasText: 'Bar Alpino' }).getByRole('button', { name: 'Mi interessa', exact: true }).click();
+  await page.waitForFunction(() => /Bar Alpino/.test(document.querySelector('details.sec[data-id="see"]').innerText));
+  await page.locator('details.sec[data-id="see"]').getByText('Bar Alpino').first().click();
   await page.waitForSelector('.sheet-head h2:has-text("Bar Alpino")');
   await sheet().getByRole('button', { name: /Condividi \/ Naviga/ }).click();
   await page.waitForSelector('.sheet-head h2:has-text("Condividi o naviga")');

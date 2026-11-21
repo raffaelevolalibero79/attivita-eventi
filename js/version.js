@@ -3,9 +3,20 @@
 //   • secondo numero = funzione nuova o cambiata in modo visibile
 //   • terzo numero  = piccola correzione
 // Il numero va tenuto uguale anche in sw.js (lo controlla il test automatico).
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '1.3.1';
 export const APP_DATE = '2026-11-21';
 export const CHANGELOG = [
+  { v: '1.3.1', d: '2026-11-21', items: [
+    'Luoghi di tipo "attività": appena creati vanno in "Da valutare"; con ⭐ "mi interessa" passano in "Prossimi eventi" (sotto gli eventi, nella parte "Attività (senza data)").',
+    '"Luoghi" raccoglie le attività già fatte; "Da vedere" e "Mangiare" restano come prima.',
+    'Il calendario mostra sempre tutti gli eventi che hanno una data, qualunque sia lo stato e anche con il filtro "stato" attivo.',
+  ] },
+  { v: '1.3.0', d: '2026-11-21', items: [
+    'Riquadri riorganizzati in base allo stato: tutto ciò che è nuovo o "da valutare" sta solo in "Da valutare".',
+    'Con ⭐ "mi interessa": gli eventi vanno in "Prossimi eventi"; i luoghi in "Da vedere", "Mangiare" oppure "Luoghi" (attività) secondo la categoria.',
+    'Con ✕ "non mi interessa": tutto va nel nuovo riquadro "Non mi interessa" (si può rimettere in "Da valutare" con un tocco).',
+    'Nuovi riquadri "Da vedere" e "Mangiare".',
+  ] },
   { v: '1.2.1', d: '2026-11-21', items: [
     'Tasto "Condividi foto" su tutte le locandine: nella scheda dell\'evento, nella bozza da foto e nell\'anteprima ingrandita. Si invia solo la foto ridotta, senza posizione GPS né dati nascosti.',
   ] },

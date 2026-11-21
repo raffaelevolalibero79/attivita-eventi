@@ -1,4 +1,11 @@
-// sections.js — righe riutilizzabili e sezioni a tendina (Prossimi eventi, Da valutare, Luoghi, Viaggi).
+// sections.js — righe riutilizzabili e sezioni a tendina.
+// Dove finisce ogni cosa (ogni elemento sta in UN solo riquadro, secondo lo stato):
+//   • "da valutare"      → solo in "Da valutare" (eventi e luoghi di qualsiasi categoria)
+//   • "mi interessa"     → eventi e luoghi "attività" in "Prossimi eventi"; luoghi "da vedere" in "Da vedere"; luoghi "mangiare" in "Mangiare"
+//   • "fatto"            → i luoghi "da vedere" e "mangiare" restano nel loro riquadro con l'etichetta; le attività vanno in "Luoghi";
+//                          gli eventi escono da "Prossimi eventi" (restano nel calendario)
+//   • "non mi interessa" → solo in "Non mi interessa"
+//   • il calendario mostra sempre tutti gli eventi che hanno una data.
 import { el, clear } from './ui.js';
 import * as U from './util.js';
 
@@ -55,10 +62,18 @@ const writeOpen = (s) => { try { localStorage.setItem(OPEN_KEY, JSON.stringify([
 // ctx: { data() → {fEvents, fPlaces, allEvents, allPlaces, trips}, home(), openEvent, openPlace, openTrip, newTrip, setStatus }
 export function createSections(host, ctx) {
   const open = readOpen();
+  const placesOf = (d, cats, sts) => d.fPlaces.filter((p) => sts.includes(p.status) && cats(p.category));
+  const isSee = (c) => c === 'vedere';
+  const isEat = (c) => c === 'mangiare';
+  const isOther = (c) => !isSee(c) && !isEat(c);       // attività (e qualunque altra categoria)
+  const DONE = ['interessa', 'fatto'];
   const defs = [
-    { id: 'next', title: '📅 Prossimi eventi', build: buildNext, count: (d) => nextOccs(d).length },
+    { id: 'next', title: '📅 Prossimi eventi', build: buildNext, count: (d) => nextOccs(d).length + nextPlaces(d).length },
     { id: 'eval', title: '❔ Da valutare', build: buildEval, count: (d) => evalItems(d).events.length + evalItems(d).places.length },
-    { id: 'places', title: '📍 Luoghi', build: buildPlaces, count: (d) => d.fPlaces.length },
+    { id: 'see', title: '🏛️ Da vedere', build: (d) => buildCat(d, isSee, 'Nessun luogo "da vedere" che ti interessa. Segna ⭐ un luogo in "Da valutare" e arriva qui.'), count: (d) => placesOf(d, isSee, DONE).length },
+    { id: 'eat', title: '🍽️ Mangiare', build: (d) => buildCat(d, isEat, 'Nessun posto dove mangiare che ti interessa. Segna ⭐ un luogo in "Da valutare" e arriva qui.'), count: (d) => placesOf(d, isEat, DONE).length },
+    { id: 'places', title: '📍 Luoghi', build: (d) => buildCat(d, isOther, 'Qui finiscono le attività (segnaposto GPS) che hai già fatto. Quelle che ti interessano sono in "Prossimi eventi".', ['fatto']), count: (d) => placesOf(d, isOther, ['fatto']).length },
+    { id: 'no', title: '🚫 Non mi interessa', build: buildNo, count: (d) => noItems(d).events.length + noItems(d).places.length },
     { id: 'trips', title: '🧳 Viaggi', build: buildTrips, count: (d) => d.trips.length },
   ];
   const nodes = {};
@@ -75,7 +90,7 @@ export function createSections(host, ctx) {
 
   function nextOccs(data) {
     const t = today();
-    const occ = data.fEvents.flatMap((ev) => U.expandOccurrences(ev, t, U.addDays(t, 120), 60));
+    const occ = data.fEvents.filter((ev) => ev.status === 'interessa').flatMap((ev) => U.expandOccurrences(ev, t, U.addDays(t, 120), 60));
     occ.sort((a, b) => (a.date + (a.startTime || '99')).localeCompare(b.date + (b.startTime || '99')));
     return occ.slice(0, 60);
   }
@@ -94,9 +109,14 @@ export function createSections(host, ctx) {
   const plH = () => ({ onOpen: ctx.openPlace, onStatus: ctx.setStatus, home: ctx.home() });
   const empty = (t) => el('div', { class: 'empty', text: t });
 
+  const nextPlaces = (data) => placesOf(data, isOther, ['interessa']).sort((a, b) => a.name.localeCompare(b.name, 'it'));
   function buildNext(data) {
     const occ = nextOccs(data);
-    return occ.length ? occ.map((o) => eventRow(o, evH())) : [empty('Nessun evento nei prossimi mesi con i filtri attuali.')];
+    const acts = nextPlaces(data);
+    if (!occ.length && !acts.length) return [empty('Nessun evento o attività che ti interessa. Segna ⭐ qualcosa in "Da valutare" e arriva qui.')];
+    const out = occ.map((o) => eventRow(o, evH()));
+    if (acts.length) { if (occ.length) out.push(el('div', { class: 'sub', text: 'Attività (senza data)' })); out.push(...acts.map((p) => placeRow(p, plH()))); }
+    return out;
   }
   function buildEval(data) {
     const { events, places } = evalItems(data);
@@ -107,10 +127,25 @@ export function createSections(host, ctx) {
     if (places.length) { out.push(el('div', { class: 'sub', text: 'Luoghi' })); out.push(...places.map((p) => placeRow(p, plH()))); }
     return out;
   }
-  function buildPlaces(data) {
-    const order = { interessa: 0, da_valutare: 1, fatto: 2, non_interessa: 3 };
-    const list = [...data.fPlaces].sort((a, b) => (order[a.status] ?? 1) - (order[b.status] ?? 1) || a.name.localeCompare(b.name, 'it'));
-    return list.length ? list.map((p) => placeRow(p, plH())) : [empty('Nessun luogo salvato. Premi ＋ per aggiungerne uno.')];
+  function noItems(data) {
+    const t = today();
+    const events = data.fEvents.filter((e) => e.status === 'non_interessa').map((ev) => (ev.startDate ? (U.nextOccurrence(ev, t) || { ev, date: ev.startDate }) : { ev, date: '' }))
+      .sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
+    const places = data.fPlaces.filter((p) => p.status === 'non_interessa').sort((a, b) => a.name.localeCompare(b.name, 'it'));
+    return { events, places };
+  }
+  function buildNo(data) {
+    const { events, places } = noItems(data);
+    if (!events.length && !places.length) return [empty('Qui finisce quello che segni con ✕. Se cambi idea, tocca ⭐ o di nuovo ✕ per rimetterlo in "Da valutare".')];
+    const out = [];
+    if (events.length) { out.push(el('div', { class: 'sub', text: 'Eventi' })); out.push(...events.map((o) => eventRow(o, evH()))); }
+    if (places.length) { out.push(el('div', { class: 'sub', text: 'Luoghi' })); out.push(...places.map((p) => placeRow(p, plH()))); }
+    return out;
+  }
+  function buildCat(data, cats, emptyText, sts = DONE) {
+    const order = { interessa: 0, fatto: 1 };
+    const list = placesOf(data, cats, sts).sort((a, b) => (order[a.status] ?? 0) - (order[b.status] ?? 0) || a.name.localeCompare(b.name, 'it'));
+    return list.length ? list.map((p) => placeRow(p, plH())) : [empty(emptyText)];
   }
   function buildTrips(data) {
     const out = [el('button', { class: 'btn small', type: 'button', text: '＋ Nuovo viaggio', onclick: ctx.newTrip })];

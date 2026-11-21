@@ -1,6 +1,6 @@
 // Service worker: tiene una copia dei file dell'app per aprirla anche senza rete.
 // Non intercetta mai Firebase, Anthropic, OpenStreetMap (ricerca) né le mappe: passano direttamente.
-const VERSION = '1.2.1';   // = APP_VERSION in js/version.js (controllato dal test)
+const VERSION = '1.3.1';   // = APP_VERSION in js/version.js (controllato dal test)
 const CACHE = `attivita-eventi-${VERSION}`;
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
