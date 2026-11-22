@@ -3,9 +3,18 @@
 //   • secondo numero = funzione nuova o cambiata in modo visibile
 //   • terzo numero  = piccola correzione
 // Il numero va tenuto uguale anche in sw.js (lo controlla il test automatico).
-export const APP_VERSION = '1.3.1';
+export const APP_VERSION = '1.5.0';
 export const APP_DATE = '2026-11-21';
 export const CHANGELOG = [
+  { v: '1.5.0', d: '2026-11-21', items: [
+    'Nuova categoria "Luoghi" per i segnaposto GPS: si sceglie accanto a Mangiare, Attività e Da vedere quando si crea o si modifica un luogo.',
+    'I segnaposto "Luoghi" non vanno in "Da valutare": stanno subito nel riquadro "Luoghi" (se li segni ✕ vanno in "Non mi interessa").',
+    'Sulla mappa hanno il loro colore (verde acqua) e c\'è il nuovo bottone filtro "Luoghi" in alto.',
+    'Gli eventi continuano ad avere solo Mangiare, Attività e Da vedere.',
+  ] },
+  { v: '1.4.0', d: '2026-11-21', items: [
+    'Nuovo sfondo: la foto del bosco d\'autunno al posto del tramonto.',
+  ] },
   { v: '1.3.1', d: '2026-11-21', items: [
     'Luoghi di tipo "attività": appena creati vanno in "Da valutare"; con ⭐ "mi interessa" passano in "Prossimi eventi" (sotto gli eventi, nella parte "Attività (senza data)").',
     '"Luoghi" raccoglie le attività già fatte; "Da vedere" e "Mangiare" restano come prima.',

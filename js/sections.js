@@ -1,6 +1,7 @@
 // sections.js — righe riutilizzabili e sezioni a tendina.
 // Dove finisce ogni cosa (ogni elemento sta in UN solo riquadro, secondo lo stato):
-//   • "da valutare"      → solo in "Da valutare" (eventi e luoghi di qualsiasi categoria)
+//   • "da valutare"      → solo in "Da valutare" (eventi e luoghi di qualsiasi categoria, tranne i segnaposto "Luoghi")
+//   • categoria "Luoghi" → semplici segnaposto GPS: stanno subito nel riquadro "Luoghi" (non serve valutarli), tranne se segnati "non mi interessa"
 //   • "mi interessa"     → eventi e luoghi "attività" in "Prossimi eventi"; luoghi "da vedere" in "Da vedere"; luoghi "mangiare" in "Mangiare"
 //   • "fatto"            → i luoghi "da vedere" e "mangiare" restano nel loro riquadro con l'etichetta; le attività vanno in "Luoghi";
 //                          gli eventi escono da "Prossimi eventi" (restano nel calendario)
@@ -46,7 +47,7 @@ export function placeRow(p, { onOpen, onStatus, home }) {
   const km = home && Number.isFinite(p.lat) ? U.haversineKm(home, p) : null;
   const tags = [el('span', { class: 'tag', text: `${cat(p.category).icon} ${cat(p.category).label}` })];
   if (km != null) tags.push(el('span', { class: 'tag', text: `${km < 10 ? km.toFixed(1) : Math.round(km)} km da casa` }));
-  if (p.status !== 'interessa') tags.push(el('span', { class: 'tag', text: U.STATUSES[sk(p.status)].short }));
+  if (p.status !== 'interessa' && !(p.category === 'luoghi' && p.status === 'da_valutare')) tags.push(el('span', { class: 'tag', text: U.STATUSES[sk(p.status)].short }));
   if (p.rating) tags.push(el('span', { class: 'tag', text: '★'.repeat(Math.round(p.rating)) }));
   return el('div', { class: `row cat-${U.CATEGORIES[p.category] ? p.category : 'attivita'} st-${sk(p.status)}` },
     el('div', { class: 'stripe' }),
@@ -65,14 +66,15 @@ export function createSections(host, ctx) {
   const placesOf = (d, cats, sts) => d.fPlaces.filter((p) => sts.includes(p.status) && cats(p.category));
   const isSee = (c) => c === 'vedere';
   const isEat = (c) => c === 'mangiare';
-  const isOther = (c) => !isSee(c) && !isEat(c);       // attività (e qualunque altra categoria)
+  const isPin = (c) => c === 'luoghi';
+  const isOther = (c) => !isSee(c) && !isEat(c) && !isPin(c);       // attività (e qualunque categoria sconosciuta)
   const DONE = ['interessa', 'fatto'];
   const defs = [
     { id: 'next', title: '📅 Prossimi eventi', build: buildNext, count: (d) => nextOccs(d).length + nextPlaces(d).length },
     { id: 'eval', title: '❔ Da valutare', build: buildEval, count: (d) => evalItems(d).events.length + evalItems(d).places.length },
     { id: 'see', title: '🏛️ Da vedere', build: (d) => buildCat(d, isSee, 'Nessun luogo "da vedere" che ti interessa. Segna ⭐ un luogo in "Da valutare" e arriva qui.'), count: (d) => placesOf(d, isSee, DONE).length },
     { id: 'eat', title: '🍽️ Mangiare', build: (d) => buildCat(d, isEat, 'Nessun posto dove mangiare che ti interessa. Segna ⭐ un luogo in "Da valutare" e arriva qui.'), count: (d) => placesOf(d, isEat, DONE).length },
-    { id: 'places', title: '📍 Luoghi', build: (d) => buildCat(d, isOther, 'Qui finiscono le attività (segnaposto GPS) che hai già fatto. Quelle che ti interessano sono in "Prossimi eventi".', ['fatto']), count: (d) => placesOf(d, isOther, ['fatto']).length },
+    { id: 'places', title: '📍 Luoghi', build: buildPins, count: (d) => pinItems(d).length },
     { id: 'no', title: '🚫 Non mi interessa', build: buildNo, count: (d) => noItems(d).events.length + noItems(d).places.length },
     { id: 'trips', title: '🧳 Viaggi', build: buildTrips, count: (d) => d.trips.length },
   ];
@@ -101,7 +103,7 @@ export function createSections(host, ctx) {
       const n = U.nextOccurrence(ev, t);
       return n;
     }).filter(Boolean).sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
-    const places = data.fPlaces.filter((p) => p.status === 'da_valutare').sort((a, b) => a.name.localeCompare(b.name, 'it'));
+    const places = data.fPlaces.filter((p) => p.status === 'da_valutare' && !isPin(p.category)).sort((a, b) => a.name.localeCompare(b.name, 'it'));
     return { events, places };
   }
 
@@ -141,6 +143,15 @@ export function createSections(host, ctx) {
     if (events.length) { out.push(el('div', { class: 'sub', text: 'Eventi' })); out.push(...events.map((o) => eventRow(o, evH()))); }
     if (places.length) { out.push(el('div', { class: 'sub', text: 'Luoghi' })); out.push(...places.map((p) => placeRow(p, plH()))); }
     return out;
+  }
+  // "Luoghi": i segnaposto semplici (categoria Luoghi) + le attività già fatte
+  function pinItems(data) {
+    return data.fPlaces.filter((p) => (isPin(p.category) && p.status !== 'non_interessa') || (isOther(p.category) && p.status === 'fatto'))
+      .sort((a, b) => a.name.localeCompare(b.name, 'it'));
+  }
+  function buildPins(data) {
+    const list = pinItems(data);
+    return list.length ? list.map((p) => placeRow(p, plH())) : [empty('Qui trovi i segnaposto GPS che classifichi come "Luoghi" (creati nell\'app o importati da Google Maps) e le attività già fatte.')];
   }
   function buildCat(data, cats, emptyText, sts = DONE) {
     const order = { interessa: 0, fatto: 1 };

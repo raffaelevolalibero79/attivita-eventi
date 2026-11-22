@@ -17,13 +17,13 @@ function loadFilters() {
   try {
     const o = JSON.parse(localStorage.getItem(FILTER_KEY) || '{}');
     const f = defaultFilters();
-    if (Array.isArray(o.cats)) f.cats = o.cats.filter((c) => U.CATEGORIES[c]);
+    if (Array.isArray(o.cats)) { f.cats = o.cats.filter((c) => U.CATEGORIES[c]); if (o.v !== 2 && !f.cats.includes('luoghi')) f.cats.push('luoghi'); }   // v2: esiste la categoria "Luoghi"
     if (['all', ...U.STATUS_KEYS].includes(o.status)) f.status = o.status;
     if ([0, 5, 10, 25, 50, 100, 250].includes(o.km)) f.km = o.km;
     return f;
   } catch { return defaultFilters(); }
 }
-const saveFilters = (f) => { try { localStorage.setItem(FILTER_KEY, JSON.stringify({ cats: f.cats, status: f.status, km: f.km })); } catch { /* ignora */ } };
+const saveFilters = (f) => { try { localStorage.setItem(FILTER_KEY, JSON.stringify({ v: 2, cats: f.cats, status: f.status, km: f.km })); } catch { /* ignora */ } };
 
 async function main() {
   const store = createStore();

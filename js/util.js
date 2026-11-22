@@ -5,8 +5,10 @@ export const CATEGORIES = {
   mangiare: { label: 'Mangiare', color: '#e8590c', icon: '🍽️' },
   attivita: { label: 'Attività', color: '#2f9e44', icon: '🎯' },
   vedere: { label: 'Da vedere', color: '#1c7ed6', icon: '🏛️' },
+  luoghi: { label: 'Luoghi', color: '#0c8599', icon: '📍' },     // solo per i luoghi (segnaposto GPS), non per gli eventi
 };
 export const CAT_KEYS = Object.keys(CATEGORIES);
+export const EVENT_CAT_KEYS = ['mangiare', 'attivita', 'vedere'];
 
 export const STATUSES = {
   da_valutare: { label: 'Da valutare', short: 'Da valutare', icon: '❔' },
@@ -503,7 +505,7 @@ export function sanitizeDoc(coll, o) {
     return {
       ...base,
       title: cap(o.title, 200) || 'Senza titolo',
-      category: oneOf(o.category, CAT_KEYS, 'attivita'),
+      category: oneOf(o.category, EVENT_CAT_KEYS, 'attivita'),
       status: oneOf(o.status, STATUS_KEYS, 'da_valutare'),
       description: cap(o.description, 10000),
       startDate: dateStr(o.startDate),

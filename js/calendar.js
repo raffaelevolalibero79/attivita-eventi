@@ -61,7 +61,7 @@ export function createCalendar(host, { onOpenEvent, onStatus, onAddForDate }) {
     host.append(gridEl);
 
     host.append(el('div', { class: 'legend' },
-      ...U.CAT_KEYS.map((k) => el('span', { class: `cat-${k}` }, el('i'), U.CATEGORIES[k].label)),
+      ...U.EVENT_CAT_KEYS.map((k) => el('span', { class: `cat-${k}` }, el('i'), U.CATEGORIES[k].label)),
       el('span', null, el('i', { class: 'dash' }), 'da valutare'),
       el('span', null, el('i', { class: 'fade' }), 'non mi interessa'),
       el('span', null, '⭐ in risalto = mi interessa')));

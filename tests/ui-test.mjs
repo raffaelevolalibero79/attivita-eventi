@@ -193,16 +193,59 @@ await step('luogo a mano, sezioni a tendina e filtri', async () => {
   await page.locator('#filters .chip.cat-mangiare').click();
   await page.waitForFunction(() => document.querySelectorAll('.cal-cell[data-date="2026-11-28"] .bar').length === 2);
 });
+await step('categoria "Luoghi": segnaposto semplice, subito nel riquadro Luoghi, non in Da valutare', async () => {
+  const secText = (id) => page.evaluate((x) => document.querySelector(`details.sec[data-id="${x}"]`).innerText, id);
+  // il luogo ha 4 categorie, l'evento solo 3
+  await addMenu('Nuovo luogo a mano');
+  assert.equal(await sheet().locator('.chip.cat-luoghi').count(), 1);
+  await page.getByLabel('Nome *').fill('Via Gasparona');
+  await sheet().getByRole('button', { name: /Luoghi/ }).click();
+  assert.equal(await page.getByLabel('Stato').inputValue(), 'interessa');       // un segnaposto non va "valutato"
+  await sheet().getByRole('button', { name: 'Salva' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  await page.evaluate(() => { for (const id of ['eval', 'places']) document.querySelector(`details.sec[data-id="${id}"]`).open = true; });
+  await page.waitForFunction(() => /Via Gasparona/.test(document.querySelector('details.sec[data-id="places"]').innerText));
+  for (const id of ['eval', 'next', 'eat', 'see', 'no']) assert.doesNotMatch(await secText(id), /Via Gasparona/, `non deve stare in ${id}`);
+  // anche se lo stato resta "da valutare" (scelto a mano) non finisce in "Da valutare"
+  await page.locator('details.sec[data-id="places"] .row', { hasText: 'Via Gasparona' }).locator('.main').click();
+  await page.getByRole('button', { name: /Modifica/ }).click();
+  await page.getByLabel('Stato').selectOption('da_valutare');
+  await sheet().getByRole('button', { name: 'Salva' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 1);
+  await page.waitForTimeout(300);
+  assert.doesNotMatch(await secText('eval'), /Via Gasparona/);
+  assert.match(await secText('places'), /Via Gasparona/);
+  // ✕ → "Non mi interessa"
+  await page.evaluate(() => document.querySelector('details.sec[data-id="no"]').open = true);
+  await page.locator('.sheet .sheet-head .icon-btn').click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  await page.locator('details.sec[data-id="places"] .row', { hasText: 'Via Gasparona' }).getByRole('button', { name: 'Non mi interessa', exact: true }).click();
+  await page.waitForFunction(() => /Via Gasparona/.test(document.querySelector('details.sec[data-id="no"]').innerText));
+  assert.doesNotMatch(await secText('places'), /Via Gasparona/);
+  // l'evento ha solo 3 categorie
+  await addMenu('Nuovo evento a mano');
+  assert.equal(await sheet().locator('.chip.cat-luoghi').count(), 0);
+  assert.equal(await sheet().locator('.chip.cat-mangiare, .chip.cat-attivita, .chip.cat-vedere').count(), 3);
+  await page.locator('.sheet .sheet-head .icon-btn').click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  // filtro in alto: c'è il bottone "Luoghi"
+  assert.equal(await page.locator('#filters .chip.cat-luoghi').count(), 1);
+});
 await step('calendario: mostra sempre tutti gli eventi con data, anche con il filtro "stato" attivo', async () => {
+  // un "indietro" del browser lasciato dal passaggio prima può finire un attimo dopo e annullare il ricaricamento: aspetto e, se serve, riprovo
+  const reloadSafe = async () => {
+    await page.waitForTimeout(700);
+    for (let k = 0; k < 3; k++) { try { await page.reload({ waitUntil: 'load' }); return; } catch (e) { if (!/ERR_ABORTED|detached/.test(e.message) || k === 2) throw e; await page.waitForTimeout(500); } }
+  };
   const bars = () => page.locator('.cal-cell[data-date="2026-11-28"] .bar').count();
   const before = await bars();
   assert.ok(before >= 1);
   await page.evaluate(() => localStorage.setItem('ae.filters', JSON.stringify({ cats: ['mangiare', 'attivita', 'vedere'], status: 'non_interessa', km: 0 })));
-  await page.reload({ waitUntil: 'load' });
+  await reloadSafe();
   await page.waitForSelector('.cal-grid');
   assert.equal(await bars(), before);
   await page.evaluate(() => localStorage.setItem('ae.filters', JSON.stringify({ cats: ['mangiare', 'attivita', 'vedere'], status: 'all', km: 0 })));
-  await page.reload({ waitUntil: 'load' });
+  await reloadSafe();
   await page.waitForSelector('.cal-grid');
 });
 await step('viaggio: crea, aggiunge budget, valigia e itinerario', async () => {
@@ -245,7 +288,7 @@ await step('backup (esporta / reimporta)', async () => {
     const j = await s.exportAll({ thumbs: true });
     return { ev: j.events.length, pl: j.places.length, tr: j.trips.length, app: j.app };
   });
-  assert.deepEqual(data, { ev: 3, pl: 2, tr: 1, app: 'attivita-eventi' });
+  assert.deepEqual(data, { ev: 3, pl: 3, tr: 1, app: 'attivita-eventi' });
   const bad = await page.evaluate(async () => {
     const { createStore } = await import('./js/store.js');
     const s = createStore(); await s.init();
@@ -448,7 +491,7 @@ await step('Impostazioni: mostra versione e novità', async () => {
   await page.goBack();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
 });
-await step('aspetto: sfondo a tramonto, tema chiaro, nessun filtro scuro sulla mappa', async () => {
+await step('aspetto: sfondo con la foto d\'autunno, tema chiaro, nessun filtro scuro sulla mappa', async () => {
   const css = await page.evaluate(() => ({
     bodyBg: getComputedStyle(document.body).backgroundColor,
     scheme: getComputedStyle(document.documentElement).colorScheme,
@@ -456,7 +499,8 @@ await step('aspetto: sfondo a tramonto, tema chiaro, nessun filtro scuro sulla m
     text: getComputedStyle(document.body).color,
   }));
   assert.match(css.scheme, /light/);
-  assert.match(css.before, /gradient/);
+  assert.match(css.before, /img\/sfondo\.jpg/);
+  assert.equal((await page.request.get(new URL('img/sfondo.jpg', URL_APP).href)).status(), 200);
   assert.equal(css.bodyBg, 'rgba(0, 0, 0, 0)');
   const filt = await page.evaluate(() => { const d = document.createElement('div'); d.className = 'leaflet-tile-pane'; document.body.append(d); const f = getComputedStyle(d).filter; d.remove(); return f; });
   assert.equal(filt, 'none');

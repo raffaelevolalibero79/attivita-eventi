@@ -18,15 +18,15 @@ function extLink(url, label) {
 }
 
 // ---------- selettori riutilizzabili ----------
-function catPicker(initial) {
-  let cur = U.CATEGORIES[initial] ? initial : 'attivita';
+function catPicker(initial, keys = U.EVENT_CAT_KEYS) {
+  let cur = keys.includes(initial) ? initial : 'attivita';
   const wrap = el('div', { class: 'seg' });
   const render = () => {
     clear(wrap);
-    for (const k of U.CAT_KEYS) wrap.append(chip(`${U.CATEGORIES[k].icon} ${U.CATEGORIES[k].label}`, cur === k, () => { cur = k; render(); wrap.dispatchEvent(new Event('change', { bubbles: true })); }, `cat-${k}`));
+    for (const k of keys) wrap.append(chip(`${U.CATEGORIES[k].icon} ${U.CATEGORIES[k].label}`, cur === k, () => { cur = k; render(); wrap.dispatchEvent(new Event('change', { bubbles: true })); }, `cat-${k}`));
   };
   render();
-  return { node: wrap, get value() { return cur; }, set(v) { if (U.CATEGORIES[v]) { cur = v; render(); } } };
+  return { node: wrap, get value() { return cur; }, set(v) { if (keys.includes(v)) { cur = v; render(); } } };
 }
 const statusSelect = (v) => select(U.STATUS_KEYS.map((k) => [k, `${U.STATUSES[k].icon} ${U.STATUSES[k].label}`]), U.STATUSES[v] ? v : 'da_valutare');
 const tripSelect = (ctx, v) => select([['', 'Nessun viaggio'], ...ctx.data().trips.map((t) => [t.id, t.name])], v || '');
@@ -249,8 +249,10 @@ export function openPlaceForm(ctx, draft = {}, { isNew = true, thumb = null, not
   let dirty = !!note || (isNew && !!draft.name);
   let sh;
   const name = text(d.name, 'Nome del luogo');
-  const cat = catPicker(d.category);
+  const cat = catPicker(d.category, U.CAT_KEYS);
   const status = statusSelect(d.status);
+  // un semplice segnaposto (categoria Luoghi) non va "valutato": se lo stato è ancora quello di partenza passa a "Mi interessa"
+  cat.node.addEventListener('change', () => { if (cat.value === 'luoghi' && status.value === 'da_valutare') status.value = 'interessa'; });
   const loc = locationBlock(ctx, d, () => name.value, () => sh);
   const link = el('input', { type: 'url', value: d.link, placeholder: 'https://…', autocomplete: 'off' });
   const phone = text(d.phone, 'Telefono');

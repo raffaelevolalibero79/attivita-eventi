@@ -2,17 +2,16 @@
   /* Tema unico, chiaro, con i colori di un tramonto: azzurro cielo, oro e arancio, viola dei tulipani */
   --bg: #fff8ee; --card: rgba(255,255,255,.93); --card2: #fdf1e2; --line: #ecd9c2; --text: #2a2320; --muted: #6a5d52;
   --accent: #7a3b9b; --danger: #c92a2a; --ok: #2b8a3e; --shadow: 0 2px 12px rgba(120,60,20,.16);
-  --c-mangiare: #e8590c; --c-attivita: #2f9e44; --c-vedere: #1c7ed6;
+  --c-mangiare: #e8590c; --c-attivita: #2f9e44; --c-vedere: #1c7ed6; --c-luoghi: #0c8599;
   --radius: 14px;
   color-scheme: light;
 }
-html { background: #f3c89a; }
-/* sfondo fisso: cielo azzurro in alto, nuvole rosate, sole dorato sull'orizzonte */
+html { background: #b4461c; }
+/* sfondo fisso: foto del bosco d'autunno (img/sfondo.jpg), leggermente schiarita perché le schede restino leggibili */
 body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background:
-    radial-gradient(ellipse 90% 34% at 70% 86%, rgba(255,231,160,.95), rgba(255,231,160,0) 72%),
-    radial-gradient(ellipse 70% 22% at 12% 52%, rgba(255,214,200,.55), rgba(255,214,200,0) 70%),
-    linear-gradient(180deg, #86b0dc 0%, #b7c6e2 24%, #e9d3d2 46%, #f5cf9f 66%, #f4a766 86%, #e0827a 100%); }
+    linear-gradient(180deg, rgba(255,246,232,.10), rgba(255,246,232,.04)),
+    url('../img/sfondo.jpg') 58% 62% / cover no-repeat; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: transparent; color: var(--text); font: 16px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding-bottom: 96px; }
@@ -25,6 +24,7 @@ a { color: var(--accent); }
 .cat-mangiare { --c: var(--c-mangiare); }
 .cat-attivita { --c: var(--c-attivita); }
 .cat-vedere { --c: var(--c-vedere); }
+.cat-luoghi { --c: var(--c-luoghi); }
 
 /* ---------- barra alta ---------- */
 .top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px; padding: calc(8px + env(safe-area-inset-top)) 14px 8px; background: rgba(255,244,228,.9); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
