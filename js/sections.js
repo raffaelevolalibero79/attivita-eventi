@@ -27,7 +27,7 @@ export function timeText(o) {
 }
 
 // occ = { ev, date, endDate, startTime, endTime }  oppure un evento senza data: { ev, date: '' }
-export function eventRow(occ, { onOpen, onStatus }) {
+export function eventRow(occ, { onOpen, onStatus, isNew }) {
   const ev = occ.ev;
   const when = occ.date ? [U.formatRangeIt(occ.date, occ.endDate && occ.endDate !== occ.date ? occ.endDate : ''), timeText(ev.startTime ? ev : occ)].filter(Boolean).join(' · ') : 'Data da definire';
   const where = [ev.venue, ev.address].filter(Boolean).join(', ');
@@ -35,6 +35,7 @@ export function eventRow(occ, { onOpen, onStatus }) {
   const tags = [el('span', { class: 'tag', text: `${cat(ev.category).icon} ${cat(ev.category).label}` })];
   if (rec) tags.push(el('span', { class: 'tag', text: '↻ ricorrente' }));
   if (ev.hasThumb) tags.push(el('span', { class: 'tag', text: '📷 locandina' }));
+  if (isNew && isNew(ev)) tags.unshift(el('span', { class: 'tag new', text: `🆕 nuovo · ${ev.by}` }));
   if (ev.status !== 'interessa') tags.push(el('span', { class: 'tag', text: U.STATUSES[sk(ev.status)].short }));
   return el('div', { class: `row cat-${U.CATEGORIES[ev.category] ? ev.category : 'attivita'} st-${sk(ev.status)}` },
     el('div', { class: 'stripe' }),
@@ -43,11 +44,12 @@ export function eventRow(occ, { onOpen, onStatus }) {
     quickActs(ev, (st) => onStatus('events', ev, st)));
 }
 
-export function placeRow(p, { onOpen, onStatus, home }) {
+export function placeRow(p, { onOpen, onStatus, home, isNew }) {
   const km = home && Number.isFinite(p.lat) ? U.haversineKm(home, p) : null;
   const tags = [el('span', { class: 'tag', text: `${cat(p.category).icon} ${cat(p.category).label}` })];
   if (km != null) tags.push(el('span', { class: 'tag', text: `${km < 10 ? km.toFixed(1) : Math.round(km)} km da casa` }));
   if (p.status !== 'interessa' && !(p.category === 'luoghi' && p.status === 'da_valutare')) tags.push(el('span', { class: 'tag', text: U.STATUSES[sk(p.status)].short }));
+  if (isNew && isNew(p)) tags.unshift(el('span', { class: 'tag new', text: `🆕 nuovo · ${p.by}` }));
   if (p.rating) tags.push(el('span', { class: 'tag', text: '★'.repeat(Math.round(p.rating)) }));
   return el('div', { class: `row cat-${U.CATEGORIES[p.category] ? p.category : 'attivita'} st-${sk(p.status)}` },
     el('div', { class: 'stripe' }),
@@ -107,8 +109,8 @@ export function createSections(host, ctx) {
     return { events, places };
   }
 
-  const evH = () => ({ onOpen: ctx.openEvent, onStatus: ctx.setStatus });
-  const plH = () => ({ onOpen: ctx.openPlace, onStatus: ctx.setStatus, home: ctx.home() });
+  const evH = () => ({ onOpen: ctx.openEvent, onStatus: ctx.setStatus, isNew: ctx.isNew });
+  const plH = () => ({ onOpen: ctx.openPlace, onStatus: ctx.setStatus, home: ctx.home(), isNew: ctx.isNew });
   const empty = (t) => el('div', { class: 'empty', text: t });
 
   const nextPlaces = (data) => placesOf(data, isOther, ['interessa']).sort((a, b) => a.name.localeCompare(b.name, 'it'));

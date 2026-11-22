@@ -2,7 +2,7 @@
 // Posizione di casa e chiave Claude NON vengono mai inviate al database condiviso.
 import { el, openSheet, toast, confirmDialog, field, select, downloadText, pickFile, clear } from './ui.js';
 import { CLAUDE_MODELS, CLAUDE_DEFAULT_MODEL, FIREBASE_CONFIG } from './config.js';
-import { geocode, getPosition } from './geo.js';
+import { geocode, getPosition, reverseGeocode } from './geo.js';
 import { cloudConfigured, isLocalOnlyChosen, setLocalOnly } from './store.js';
 import { APP_VERSION, APP_DATE, CHANGELOG } from './version.js';
 
@@ -94,8 +94,19 @@ export function openSettings({ store, onChanged }) {
           for (const x of r) res.append(el('button', { class: 'btn small', text: x.label, onclick: () => { saveSettings({ homeLat: x.lat, homeLng: x.lng, homeName: x.label.split(',').slice(0, 2).join(',') }); renderHome(); onChanged(); } }));
         } catch (e) { toast(e.message, 'error'); }
       } }),
-      el('button', { class: 'btn small', text: 'Usa il GPS ora', onclick: async () => {
-        try { const p = await getPosition(); saveSettings({ homeLat: p.lat, homeLng: p.lng, homeName: 'Posizione GPS' }); renderHome(); onChanged(); } catch (e) { toast(e.message, 'error'); }
+      el('button', { class: 'btn small', text: 'Usa il GPS ora', onclick: async (ev) => {
+        // il risultato (o l'errore) si legge qui sotto, dentro questa finestra, non in un avviso che sparisce
+        const btn = ev.currentTarget; btn.disabled = true; btn.textContent = 'Cerco la posizione…';
+        clear(res); res.append(el('div', { class: 'hint', text: 'Cerco la tua posizione… se il telefono chiede il permesso, tocca "Consenti".' }));
+        try {
+          const p = await getPosition();
+          let name = 'Posizione GPS';
+          try { const r = await reverseGeocode(p.lat, p.lng); if (r && r.label) name = r.label.split(',').slice(0, 2).join(','); } catch { /* facoltativo */ }
+          saveSettings({ homeLat: p.lat, homeLng: p.lng, homeName: name }); renderHome(); onChanged(); toast('Casa impostata sulla tua posizione attuale.');
+        } catch (e) {
+          clear(res); res.append(el('div', { class: 'warn', text: e.message }));
+          btn.disabled = false; btn.textContent = 'Usa il GPS ora';
+        }
       } })), res);
     if (h) homeBox.append(el('button', { class: 'btn small danger', text: 'Rimuovi casa', onclick: () => { saveSettings({ homeLat: null, homeLng: null, homeName: '' }); renderHome(); onChanged(); } }));
   };

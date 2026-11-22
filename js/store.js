@@ -2,6 +2,7 @@
 //  • "local": tutto sul telefono (IndexedDB)
 //  • "cloud": Firebase (accesso Google + Firestore) con copia offline sul telefono
 import { sanitizeDoc } from './util.js';
+import { authorLabel } from './news.js';
 import { FIREBASE_CONFIG, FIREBASE_VERSION } from './config.js';
 
 export const COLLS = ['events', 'places', 'trips'];
@@ -18,9 +19,13 @@ class Base {
     this.state = { events: [], places: [], trips: [] };
     this.listeners = new Set();
     this.statusFns = new Set();
+    this.remoteFns = new Set();
     this.status = 'local';
   }
   onChange(fn) { this.listeners.add(fn); fn(this.state); return () => this.listeners.delete(fn); }
+  onRemote(fn) { this.remoteFns.add(fn); return () => this.remoteFns.delete(fn); }
+  _remote(ev) { for (const fn of this.remoteFns) { try { fn(ev); } catch (e) { console.error(e); } } }
+  authorName() { return ''; }
   onStatus(fn) { this.statusFns.add(fn); fn(this.status); return () => this.statusFns.delete(fn); }
   _notify() { for (const fn of this.listeners) { try { fn(this.state); } catch (e) { console.error(e); } } }
   _setStatus(s) { if (s !== this.status) { this.status = s; for (const fn of this.statusFns) fn(s); } }
@@ -144,12 +149,19 @@ class CloudStore extends Base {
   _listen() {
     this._unlisten();
     this.denied = false;
+    this.live = {};
     for (const c of COLLS) {
       const un = this.m.onSnapshot(
         this.m.collection(this.db, c),
         { includeMetadataChanges: true },
         (snap) => {
           // Ogni documento letto dal database viene ripulito: qualunque dato anomalo viene scartato.
+          if (this.live[c]) {
+            for (const ch of snap.docChanges()) {
+              if (ch.type === 'added' && !ch.doc.metadata.hasPendingWrites) this._remote({ coll: c, doc: sanitizeDoc(c, { ...ch.doc.data(), id: ch.doc.id }) });
+            }
+          }
+          this.live[c] = true;
           this.state[c] = snap.docs.map((d) => sanitizeDoc(c, { ...d.data(), id: d.id }));
           this.pending[c] = snap.metadata.hasPendingWrites;
           this._notify();
@@ -191,9 +203,12 @@ class CloudStore extends Base {
   }
   signOut() { return this.m.signOut(this.auth); }
 
+  authorName() { return authorLabel(this.user); }
   put(coll, doc) {
     const d = sanitizeDoc(coll, doc);
     d.updatedAt = Date.now();
+    const known = this.state[coll].find((x) => x.id === d.id);
+    d.by = (known && known.by) || d.by || this.authorName();      // chi l'ha creato non cambia più
     this.m.setDoc(this.m.doc(this.db, coll, d.id), d).catch((e) => this._onError(e));
     return d;
   }

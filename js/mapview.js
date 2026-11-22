@@ -110,7 +110,6 @@ export async function createMapView(container, { buttonsHost, bannerHost, onOpen
   clear(buttonsHost).append(
     el('button', { 'aria-label': 'Dove sono', title: 'Dove sono', text: '📍', onclick: () => buttonsHost.dispatchEvent(new CustomEvent('locate')) }),
     el('button', { 'aria-label': 'Vai a casa', title: 'Casa', text: '🏠', onclick: () => { const h = getHome(); if (h) map.flyTo([h.lat, h.lng], 12); else buttonsHost.dispatchEvent(new CustomEvent('nohome')); } }),
-    el('button', { 'aria-label': 'Mostra tutto', title: 'Mostra tutto', text: '⤢', onclick: () => buttonsHost.dispatchEvent(new CustomEvent('fit')) }),
   );
   new ResizeObserver(() => map.invalidateSize()).observe(container);
   return api;

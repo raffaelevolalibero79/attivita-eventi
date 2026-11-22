@@ -481,6 +481,7 @@ export function sanitizeDoc(coll, o) {
     id: cap(o.id, 40).replace(/[^A-Za-z0-9_-]/g, '') || uid(),
     createdAt: num(o.createdAt, 0, 9e15) || Date.now(),
     updatedAt: num(o.updatedAt, 0, 9e15) || Date.now(),
+    by: cap(o.by, 40),        // nome di chi ha creato l'elemento (serve per le "novità")
   };
   if (coll === 'places') {
     return {

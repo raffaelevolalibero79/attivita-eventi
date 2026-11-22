@@ -3,6 +3,7 @@ import * as U from '../js/util.js';
 import { readFileSync } from 'node:fs';
 import { APP_VERSION, CHANGELOG } from '../js/version.js';
 import { locationLinks, hasLocation } from '../js/sharelinks.js';
+import { authorLabel, loadSeen, isNew, markSeen, markAllSeen, describe } from '../js/news.js';
 
 let n = 0;
 const t = (name, fn) => { try { fn(); n++; console.log('ok  ', name); } catch (e) { console.error('FAIL', name, '\n  ', e.message); process.exitCode = 1; } };
@@ -209,5 +210,33 @@ t('condividi posizione: link costruiti solo da numeri e testo codificato', () =>
   assert.equal(hasLocation({ lat: 45.1, lng: 11.1 }), true);
   const bad = locationLinks({ name: 'a&b=c#d\nhttps://evil', lat: 1, lng: 2 });
   assert.ok(!bad.waze.includes('evil') && !bad.gmapsNav.includes('evil'));
+});
+const fakeStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) }; };
+t('novità: nome di chi ha creato, "nuovo" e "visto"', () => {
+  assert.equal(authorLabel({ displayName: 'Elena Ferretti', email: 'x@y.it' }), 'Elena');
+  assert.equal(authorLabel({ displayName: '', email: 'raffaele.rossi@gmail.com' }), 'raffaele.rossi');
+  assert.equal(authorLabel(null), '');
+  const store = fakeStore();
+  const st = loadSeen(store, 1000);
+  assert.equal(st.base, 1000);
+  const d = (o) => ({ id: 'a', by: 'Elena', createdAt: 2000, title: 'Sagra', ...o });
+  assert.equal(isNew(d({}), 'Raffaele', st), true);
+  assert.equal(isNew(d({ by: 'Raffaele' }), 'Raffaele', st), false);      // creato da me
+  assert.equal(isNew(d({ by: '' }), 'Raffaele', st), false);              // senza autore (dati vecchi)
+  assert.equal(isNew(d({ createdAt: 900 }), 'Raffaele', st), false);      // più vecchio del primo avvio
+  markSeen(store, st, 'a');
+  assert.equal(isNew(d({}), 'Raffaele', st), false);
+  assert.equal(loadSeen(store, 5000).ids[0], 'a');                        // si ricorda dopo la chiusura dell'app
+  markAllSeen(store, st, 3000);
+  assert.equal(isNew(d({ id: 'b', createdAt: 2500 }), 'Raffaele', st), false);
+  assert.equal(describe([d({})]), 'Elena ha aggiunto: Sagra');
+  assert.equal(describe([d({}), d({ id: 'c' })]), 'Elena ha aggiunto 2 novità');
+  assert.equal(describe([d({}), d({ id: 'c', by: 'Marco' })]), 'Elena e Marco hanno aggiunto 2 novità');
+  assert.equal(describe([]), '');
+  assert.equal(U.sanitizeDoc('events', { title: 'x', by: 'Elena<script>'.padEnd(80, 'a') }).by.length, 40);
+});
+t('la mappa non ha più il bottone "Mostra tutto"', () => {
+  assert.ok(!/Mostra tutto/.test(readFileSync(new URL('../js/mapview.js', import.meta.url), 'utf8')));
+  assert.ok(!/id="ver"/.test(readFileSync(new URL('../index.html', import.meta.url), 'utf8')));
 });
 console.log(`\n${n} test superati`);

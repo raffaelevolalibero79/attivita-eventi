@@ -72,13 +72,21 @@ export async function reverseGeocode(lat, lng) {
   return d && d.display_name ? { label: String(d.display_name).slice(0, 300), name: String(d.name || '').slice(0, 200) } : null;
 }
 
-export function getPosition() {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error('Questo telefono non fornisce la posizione.'));
-    navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }),
-      (e) => reject(new Error(e.code === 1 ? 'Permesso di posizione negato: attivalo nelle impostazioni del browser.' : 'Non riesco a trovare la tua posizione.')),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
-    );
-  });
+// Posizione del telefono. Prima prova con il GPS (preciso, ma serve cielo aperto e può metterci un po'),
+// se non risponde in tempo ripiega sulla posizione "approssimata" da rete/Wi-Fi, che arriva quasi subito anche in casa.
+const once = (opts) => new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, opts));
+const geoError = (e) => new Error(
+  e && e.code === 1 ? 'Il permesso di posizione è negato per questa app. Attivalo: tieni premuta l\'icona dell\'app → Info app → Autorizzazioni → Posizione → "Consenti solo durante l\'uso".'
+    : e && e.code === 3 ? 'La posizione non è arrivata in tempo: prova all\'aperto o attiva Wi-Fi e Posizione nelle impostazioni del telefono.'
+      : 'Il telefono non riesce a trovare la posizione: controlla che "Posizione" sia attiva (menu a tendina delle notifiche → Posizione).');
+export async function getPosition() {
+  if (!navigator.geolocation) throw new Error('Questo telefono non fornisce la posizione.');
+  let p;
+  try {
+    p = await once({ enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+  } catch (e1) {
+    if (e1 && e1.code === 1) throw geoError(e1);
+    try { p = await once({ enableHighAccuracy: false, timeout: 15000, maximumAge: 10 * 60000 }); } catch (e2) { throw geoError(e2); }
+  }
+  return { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
 }

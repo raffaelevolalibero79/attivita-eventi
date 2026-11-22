@@ -3,9 +3,14 @@
 //   • secondo numero = funzione nuova o cambiata in modo visibile
 //   • terzo numero  = piccola correzione
 // Il numero va tenuto uguale anche in sw.js (lo controlla il test automatico).
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.6.0';
 export const APP_DATE = '2026-11-21';
 export const CHANGELOG = [
+  { v: '1.6.0', d: '2026-11-22', items: [
+    'Novità tra i due telefoni: ogni evento o luogo porta il nome di chi l\'ha creato; se l\'altro telefono aggiunge qualcosa compare un avviso (app aperta) e, alla riapertura, un riquadro giallo "Elena ha aggiunto…" con l\'etichetta 🆕 sulle schede nuove. Si segnano come viste aprendole o con "Segna come viste".',
+    'Tolto il numero di versione dal titolo (resta nelle Impostazioni) e tolto il bottone per ingrandire la mappa.',
+    '"Usa il GPS ora": risponde subito, ripiega sulla posizione da rete se il GPS non arriva, scrive il risultato o l\'errore dentro la finestra e spiega come attivare il permesso.',
+  ] },
   { v: '1.5.0', d: '2026-11-21', items: [
     'Nuova categoria "Luoghi" per i segnaposto GPS: si sceglie accanto a Mangiare, Attività e Da vedere quando si crea o si modifica un luogo.',
     'I segnaposto "Luoghi" non vanno in "Da valutare": stanno subito nel riquadro "Luoghi" (se li segni ✕ vanno in "Non mi interessa").',

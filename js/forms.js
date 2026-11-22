@@ -308,6 +308,7 @@ function liveSheet(ctx, { title, render, getItem, footer }) {
 }
 
 export function openEventDetail(ctx, id, occDate) {
+  if (ctx.markSeen) ctx.markSeen(id);
   const get = () => ctx.data().allEvents.find((e) => e.id === id);
   if (!get()) return null;
   const render = (ev, sh) => {
@@ -349,6 +350,7 @@ export function openEventDetail(ctx, id, occDate) {
 }
 
 export function openPlaceDetail(ctx, id) {
+  if (ctx.markSeen) ctx.markSeen(id);
   const get = () => ctx.data().allPlaces.find((p) => p.id === id);
   if (!get()) return null;
   const render = (p, sh) => {
@@ -422,8 +424,8 @@ export function openTripView(ctx, id) {
     out.push(el('div', { class: 'sub', text: `Luoghi ed eventi (${items.length})` }));
     for (const it of items) {
       out.push(it.kind === 'place'
-        ? placeRow(it.p, { onOpen: (p) => openPlaceDetail(ctx, p.id), onStatus: ctx.setStatus, home: ctx.home() })
-        : eventRow({ ev: it.e, date: it.e.startDate || '', endDate: it.e.endDate }, { onOpen: (e) => openEventDetail(ctx, e.id, ''), onStatus: ctx.setStatus }));
+        ? placeRow(it.p, { onOpen: (p) => openPlaceDetail(ctx, p.id), onStatus: ctx.setStatus, home: ctx.home(), isNew: ctx.isNew })
+        : eventRow({ ev: it.e, date: it.e.startDate || '', endDate: it.e.endDate }, { onOpen: (e) => openEventDetail(ctx, e.id, ''), onStatus: ctx.setStatus, isNew: ctx.isNew }));
     }
     const free = [...ctx.data().allPlaces.filter((p) => !p.tripId).map((p) => ['place:' + p.id, `📍 ${p.name}`]), ...ctx.data().allEvents.filter((e) => !e.tripId).map((e) => ['event:' + e.id, `📅 ${e.title}`])];
     if (free.length) {

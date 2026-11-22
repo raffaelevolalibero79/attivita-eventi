@@ -7,7 +7,7 @@ import { createMapView } from './mapview.js';
 import { createSections } from './sections.js';
 import { openEventForm, openPlaceForm, openEventDetail, openPlaceDetail, openTripForm, openTripView } from './forms.js';
 import { openAddMenu, readImage, readText, openPlaceFromMaps, pickImageFromUser, takePhoto } from './capture.js';
-import { APP_VERSION } from './version.js';
+import { loadSeen, isNew as isNewDoc, markSeen as markSeenDoc, markAllSeen, describe } from './news.js';
 import { openSettings, getHome, getSettings, statusText } from './settings.js';
 import { getPosition, reverseGeocode } from './geo.js';
 
@@ -60,6 +60,7 @@ async function main() {
   // ---------- stato e filtri ----------
   const filters = loadFilters();
   let data = { allEvents: [], allPlaces: [], trips: [], fEvents: [], calEvents: [], fPlaces: [] };
+  const seenState = loadSeen(localStorage);
   let stale = true;   // true = i dati filtrati vanno ricalcolati prima di essere usati
   store.onChange(() => { stale = true; });   // registrato per primo: le schede aperte leggono sempre dati aggiornati
 
@@ -88,6 +89,9 @@ async function main() {
   let mapApi = null;
   const ctx = {
     store, data: () => { if (stale) applyFilters(); return data; }, home: getHome,
+    // novità aggiunte dall'altro telefono e non ancora viste
+    isNew: (doc) => isNewDoc(doc, store.authorName(), seenState),
+    markSeen: (id) => { const was = seenState.ids.length; markSeenDoc(localStorage, seenState, id); if (seenState.ids.length !== was) { renderNews(); refresh(); } },
     pickOnMap: (m) => (mapApi ? mapApi.pick(m) : Promise.resolve(null)),
     showOnMap: (lat, lng) => { if (mapApi) mapApi.flyTo(lat, lng); },
     pickImage: () => new Promise((resolve) => {
@@ -135,7 +139,7 @@ async function main() {
 
   // ---------- elenchi a tendina ----------
   const sections = createSections($('#sections'), {
-    data: () => ctx.data(), home: getHome,
+    data: () => ctx.data(), home: getHome, isNew: (d) => ctx.isNew(d),
     openEvent: (ev, date) => openEventDetail(ctx, ev.id, date),
     openPlace: (p) => openPlaceDetail(ctx, p.id),
     openTrip: (t) => openTripView(ctx, t.id),
@@ -164,7 +168,6 @@ async function main() {
     onLongPress: (p) => ctx.newPlaceAt(p),
   });
   if (mapApi) {
-    mapHost.addEventListener('fit', () => mapApi.fit(mapItems()));
     mapHost.addEventListener('nohome', () => toast('Imposta la posizione di casa dalle Impostazioni.'));
     mapHost.addEventListener('locate', async () => {
       try { const p = await getPosition(); mapApi.showMe(p.lat, p.lng); mapApi.flyTo(p.lat, p.lng, 15); } catch (e) { toast(e.message, 'error'); }
@@ -202,6 +205,28 @@ async function main() {
     }
   }
 
+  // ---------- novità dall'altro telefono ----------
+  const newsEl = $('#news');
+  function renderNews() {
+    const all = [...store.state.events, ...store.state.places].filter((d) => ctx.isNew(d));
+    all.sort((a, b) => b.createdAt - a.createdAt);
+    clear(newsEl);
+    newsEl.hidden = !all.length;
+    if (all.length) {
+      newsEl.append(el('span', { text: `🆕 ${describe(all)}` }),
+        el('button', { type: 'button', class: 'btn small', text: 'Segna come viste', onclick: () => { markAllSeen(localStorage, seenState); for (const d of all) markSeenDoc(localStorage, seenState, d.id); renderNews(); refresh(); } }));   // anche se l'orologio dell'altro telefono va avanti
+    }
+    try { if (all.length && navigator.setAppBadge) navigator.setAppBadge(all.length); else if (navigator.clearAppBadge) navigator.clearAppBadge(); } catch { /* facoltativo */ }
+  }
+  // Avviso quando l'altro telefono aggiunge qualcosa mentre l'app è aperta (più novità ravvicinate = un solo avviso)
+  let pendingNews = [], newsTimer = 0;
+  store.onRemote(({ doc }) => {
+    if (!doc.by || doc.by === store.authorName()) return;
+    pendingNews.push(doc);
+    clearTimeout(newsTimer);
+    newsTimer = setTimeout(() => { const l = pendingNews; pendingNews = []; if (l.length) toast(`🆕 ${describe(l)}`); }, 1500);
+  });
+
   // ---------- aggiornamento ----------
   let raf = 0;
   function refresh() {
@@ -211,6 +236,7 @@ async function main() {
       applyFilters();
       calendar.render(data.calEvents);
       sections.render();
+      renderNews();
       if (mapApi) mapApi.setItems(mapItems());
     });
   }
@@ -231,7 +257,6 @@ async function main() {
   fab.hidden = false;
   fab.addEventListener('click', () => openAddMenu(ctx));
 
-  const verEl = $('#ver'); if (verEl) verEl.textContent = 'v' + APP_VERSION;
   renderFilters();
   applyFilters();
   refresh();

@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
 const URL_APP = process.argv[2] || 'http://127.0.0.1:8765/index.html';
 const SHOTS = process.argv[3] || '/tmp';
 let n = 0;
-const step = async (name, fn) => { try { await fn(); n++; console.log('ok  ', name); } catch (e) { console.error('FAIL', name, '\n  ', String(e.message).split('\n').slice(0, 4).join('\n   ')); process.exitCode = 1; } };
+const step = async (name, fn) => { try { await fn(); n++; console.log('ok  ', name); } catch (e) { console.error('FAIL', name, '\n  ', String(e.message).split('\n').slice(0, 4).join('\n   '), '\n   at', (String(e.stack).match(/ui-test\.mjs:\d+/g) || []).join(' ')); process.exitCode = 1; } };
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'it-IT', timezoneId: 'Europe/Rome', serviceWorkers: 'block' });
@@ -46,7 +46,8 @@ await step('avvio: calendario del mese corrente, sezioni chiuse', async () => {
   assert.equal(await page.locator('details.sec').count(), 7);
   assert.deepEqual(await page.locator('details.sec > summary').allInnerTexts().then((a) => a.map((t) => t.replace(/\s*\d+\s*$/, '').replace(/\s+/g, ' ').trim())), ['📅 Prossimi eventi', '❔ Da valutare', '🏛️ Da vedere', '🍽️ Mangiare', '📍 Luoghi', '🚫 Non mi interessa', '🧳 Viaggi']);
   assert.doesNotMatch(await page.locator('#sections').innerText(), /Statistiche/);
-  assert.match(await page.locator('#ver').innerText(), /^v\d+\.\d+\.\d+$/);
+  assert.equal((await page.locator('header.top h1').innerText()).trim(), 'Attività ed eventi');      // niente numero di versione nel titolo
+  assert.equal(await page.locator('#ver').count(), 0);
   assert.equal(await page.locator('#gate').isHidden(), true);
   assert.match(await page.locator('#syncState').innerText(), /questo telefono/i);
 });
@@ -481,6 +482,62 @@ await step('Google Maps: link breve senza nome né indirizzo → spiegazione chi
   await page.locator('.sheet .sheet-head .icon-btn').click();
   await sheet().getByRole('button', { name: /Chiudi senza salvare/ }).click();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+});
+await step('novità dall\'altro telefono: banner, etichetta "nuovo" e segna come viste', async () => {
+  const seed = (docs) => page.evaluate(async (d) => {
+    const { createStore } = await import('./js/store.js');
+    const st = createStore(); await st.init();
+    await st.importAll({ app: 'attivita-eventi', version: 1, events: d.events, places: d.places, trips: [], thumbs: {} });
+  }, docs);
+  await page.waitForTimeout(700);
+  const t0 = Date.now() + 5000;
+  await seed({ events: [{ id: 'novita1', title: 'Sagra di prova', category: 'mangiare', status: 'da_valutare', startDate: '2026-11-29', by: 'Elena', createdAt: t0 }], places: [{ id: 'novita2', name: 'Belvedere nuovo', category: 'vedere', status: 'da_valutare', by: 'Elena', createdAt: t0 }] });
+  // un elemento senza autore (creato da me) non è mai una novità
+  await seed({ events: [], places: [{ id: 'mio1', name: 'Posto mio', category: 'vedere', status: 'da_valutare', by: '', createdAt: t0 }] });
+  await page.reload({ waitUntil: 'load' }); await page.waitForSelector('.cal-grid');
+  await page.waitForFunction(() => !document.querySelector('#news').hidden);
+  assert.match(await page.locator('#news').innerText(), /Elena ha aggiunto 2 novità/);
+  await page.evaluate(() => { document.querySelector('details.sec[data-id="eval"]').open = true; });
+  await page.waitForFunction(() => /Sagra di prova/.test(document.querySelector('details.sec[data-id="eval"]').innerText));
+  assert.equal(await page.locator('details.sec[data-id="eval"] .tag.new').count(), 2);
+  assert.doesNotMatch(await page.locator('details.sec[data-id="eval"] .row', { hasText: 'Posto mio' }).innerText(), /nuovo/);
+  // aprire un elemento lo segna come visto
+  await page.locator('details.sec[data-id="eval"] .row', { hasText: 'Sagra di prova' }).locator('.main').click();
+  await page.waitForSelector('.sheet-head h2:has-text("Sagra di prova")');
+  await page.goBack(); await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  await page.waitForFunction(() => /Elena ha aggiunto: Belvedere nuovo/.test(document.querySelector('#news').innerText));
+  // "Segna come viste" toglie tutto
+  await page.locator('#news').getByRole('button', { name: 'Segna come viste' }).click();
+  await page.waitForFunction(() => document.querySelector('#news').hidden);
+  await page.waitForFunction(() => document.querySelectorAll('details.sec[data-id="eval"] .tag.new').length === 0);
+  // dopo un ricaricamento restano viste
+  await page.waitForTimeout(700); await page.reload({ waitUntil: 'load' }); await page.waitForSelector('.cal-grid');
+  assert.equal(await page.locator('#news').isHidden(), true);
+});
+await step('"Usa il GPS ora": posizione trovata, ripiego sulla rete e permesso negato spiegato', async () => {
+  const stub = (mode) => page.evaluate((m) => {
+    navigator.geolocation.getCurrentPosition = (ok, err, opts) => {
+      if (m === 'ok' || (m === 'rete' && !opts.enableHighAccuracy)) return setTimeout(() => ok({ coords: { latitude: 45.71099, longitude: 11.58335, accuracy: 30 } }), 20);
+      setTimeout(() => err({ code: m === 'negato' ? 1 : 3 }), 20);
+    };
+  }, mode);
+  const open = async () => { await page.locator('#btnSettings').click(); await page.waitForSelector('.sheet-head h2:has-text("Impostazioni")'); };
+  const close = async () => { await page.locator('.sheet .sheet-head .icon-btn').click(); await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0); };
+  await page.route('https://nominatim.openstreetmap.org/reverse**', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ display_name: 'Via Gasparona, Riva, Breganze', name: '' }) }));
+  await stub('negato'); await open();
+  await page.getByRole('button', { name: 'Usa il GPS ora' }).click();
+  await page.waitForFunction(() => /permesso di posizione è negato/i.test(document.querySelector('.sheet').innerText));
+  assert.ok(await page.getByRole('button', { name: 'Usa il GPS ora' }).isEnabled());      // si può riprovare
+  await close();
+  await stub('rete'); await open();                                                       // GPS non risponde in tempo → posizione da rete
+  await page.getByRole('button', { name: 'Usa il GPS ora' }).click();
+  await page.waitForFunction(() => /Via Gasparona/.test(document.querySelector('.sheet').innerText));
+  await page.getByRole('button', { name: 'Rimuovi casa' }).click();
+  await page.waitForFunction(() => /Non impostata/.test(document.querySelector('.sheet').innerText));
+  await stub('ok');
+  await page.getByRole('button', { name: 'Usa il GPS ora' }).click();
+  await page.waitForFunction(() => /Via Gasparona/.test(document.querySelector('.sheet').innerText));
+  await close();
 });
 await step('Impostazioni: mostra versione e novità', async () => {
   await page.click('#btnSettings');

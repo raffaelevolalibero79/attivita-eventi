@@ -203,3 +203,8 @@ ul.news li { margin: 3px 0; }
 
 .pop-btn.alt { background: #fff; color: var(--accent); border: 1px solid var(--accent); margin-top: 6px; }
 .thumb-block { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+
+.news { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fff3bf; border: 1px solid #f0c93a; color: #5c4400; border-radius: var(--radius); padding: 10px 12px; margin-bottom: 10px; font-weight: 600; box-shadow: var(--shadow); }
+.news[hidden] { display: none; }
+.news .btn { margin-left: auto; background: #fff; }
+.tag.new { background: #ffe066; border-color: #f0c93a; color: #5c4400; font-weight: 700; }
