@@ -23,3 +23,13 @@ export function locationLinks({ name, address, lat, lng }) {
 
 export function hasLocation(item) { return !!item && locationLinks(item) !== null; }
 
+
+// Testo della lista "Cose da portare" da inviare ad altre app (Google Keep, WhatsApp…): una voce per riga, senza simboli,
+// così Keep la trasforma facilmente in elenco con le caselle. Si inviano solo le voci non ancora messe in valigia.
+export function packingText(trip) {
+  const items = (trip && Array.isArray(trip.packing) ? trip.packing : []).filter((p) => p && p.text);
+  const todo = items.filter((p) => !p.done);
+  const list = todo.length ? todo : items;
+  const title = `🧳 ${String((trip && trip.name) || 'Viaggio').slice(0, 80)} — cose da portare`;
+  return { title, body: list.map((p) => String(p.text).replace(/\s+/g, ' ').trim()).join('\n'), count: list.length, skipped: items.length - list.length };
+}

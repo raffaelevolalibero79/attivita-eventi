@@ -3,9 +3,12 @@
 //   • secondo numero = funzione nuova o cambiata in modo visibile
 //   • terzo numero  = piccola correzione
 // Il numero va tenuto uguale anche in sw.js (lo controlla il test automatico).
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.7.0';
 export const APP_DATE = '2026-11-21';
 export const CHANGELOG = [
+  { v: '1.7.0', d: '2026-11-25', items: [
+    'Viaggi → "Cose da portare": nuovi bottoni "Invia la lista (Google Keep…)" e "Copia la lista". Il menu di Android permette di scegliere Google Keep, WhatsApp, e-mail. Si inviano le voci non ancora messe in valigia.',
+  ] },
   { v: '1.6.0', d: '2026-11-22', items: [
     'Novità tra i due telefoni: ogni evento o luogo porta il nome di chi l\'ha creato; se l\'altro telefono aggiunge qualcosa compare un avviso (app aperta) e, alla riapertura, un riquadro giallo "Elena ha aggiunto…" con l\'etichetta 🆕 sulle schede nuove. Si segnano come viste aprendole o con "Segna come viste".',
     'Tolto il numero di versione dal titolo (resta nelle Impostazioni) e tolto il bottone per ingrandire la mappa.',

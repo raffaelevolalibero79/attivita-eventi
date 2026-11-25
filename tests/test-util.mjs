@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import * as U from '../js/util.js';
 import { readFileSync } from 'node:fs';
 import { APP_VERSION, CHANGELOG } from '../js/version.js';
-import { locationLinks, hasLocation } from '../js/sharelinks.js';
+import { locationLinks, hasLocation, packingText } from '../js/sharelinks.js';
 import { authorLabel, loadSeen, isNew, markSeen, markAllSeen, describe } from '../js/news.js';
 
 let n = 0;
@@ -238,5 +238,15 @@ t('novità: nome di chi ha creato, "nuovo" e "visto"', () => {
 t('la mappa non ha più il bottone "Mostra tutto"', () => {
   assert.ok(!/Mostra tutto/.test(readFileSync(new URL('../js/mapview.js', import.meta.url), 'utf8')));
   assert.ok(!/id="ver"/.test(readFileSync(new URL('../index.html', import.meta.url), 'utf8')));
+});
+t('lista "cose da portare" per Google Keep: una voce per riga, solo quelle non ancora in valigia', () => {
+  const trip = { name: 'Giappone', packing: [{ text: 'Passaporto', done: true }, { text: 'Caricabatterie', done: false }, { text: '  Adattatore\nspina ', done: false }] };
+  const r = packingText(trip);
+  assert.equal(r.title, '🧳 Giappone — cose da portare');
+  assert.equal(r.body, 'Caricabatterie\nAdattatore spina');
+  assert.deepEqual([r.count, r.skipped], [2, 1]);
+  assert.equal(packingText({ name: 'X', packing: [{ text: 'Uno', done: true }] }).body, 'Uno');   // tutto già in valigia: manda comunque la lista
+  assert.equal(packingText({ name: 'X', packing: [] }).count, 0);
+  assert.equal(packingText(null).count, 0);
 });
 console.log(`\n${n} test superati`);

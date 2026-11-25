@@ -3,7 +3,7 @@ import { el, clear, openSheet, toast, confirmDialog, chip, field, select, thumbB
 import * as U from './util.js';
 import { geocodePlace, reverseGeocode, getPosition } from './geo.js';
 import { eventRow, placeRow } from './sections.js';
-import { shareButton } from './share.js';
+import { shareButton, sharePacking } from './share.js';
 
 const catOf = (c) => U.CATEGORIES[c] || U.CATEGORIES.attivita;
 const text = (v, ph, extra) => el('input', { type: 'text', value: v || '', placeholder: ph || '', autocomplete: 'off', ...(extra || {}) });
@@ -492,6 +492,12 @@ export function openTripView(ctx, id) {
       update((x) => { x.packing.push({ id: U.uid(), text: pText.value.trim(), done: false }); });
       pText.value = '';
     } })));
+    // mandare la lista ad altre app: nel menu di Android si sceglie Google Keep (o WhatsApp, e-mail…)
+    if (t.packing.length) {
+      out.push(el('div', { class: 'seg' },
+        el('button', { type: 'button', class: 'btn small', text: '📤 Invia la lista (Google Keep…)', onclick: () => sharePacking(t, 'share') }),
+        el('button', { type: 'button', class: 'btn small', text: '📋 Copia la lista', onclick: () => sharePacking(t, 'copy') })));
+    }
     return out;
   };
   return liveSheet(ctx, { title: (t) => `🧳 ${t.name}`, render, getItem: get });

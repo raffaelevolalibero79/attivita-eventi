@@ -3,8 +3,8 @@
 // Tutti i collegamenti sono costruiti solo da numeri (coordinate) e da testo codificato: nessun dato diventa codice.
 import { el, openSheet, toast } from './ui.js';
 
-import { locationLinks, hasLocation } from './sharelinks.js';
-export { locationLinks, hasLocation };
+import { locationLinks, hasLocation, packingText } from './sharelinks.js';
+export { locationLinks, hasLocation, packingText };
 
 async function copyText(t) {
   try { await navigator.clipboard.writeText(t); return true; } catch { /* ripiego sotto */ }
@@ -43,4 +43,15 @@ export function openShareSheet(item) {
 export function shareButton(item) {
   if (!hasLocation(item)) return null;
   return el('button', { type: 'button', class: 'btn small', text: '📤 Condividi / Naviga', onclick: () => openShareSheet({ name: item.name || item.title || item.venue, address: item.address, lat: item.lat, lng: item.lng }) });
+}
+
+// Lista "Cose da portare": condivisione di Android (Google Keep, WhatsApp, e-mail…) oppure copia negli appunti
+export async function sharePacking(trip, mode = 'share') {
+  const t = packingText(trip);
+  if (!t.count) { toast('La lista è vuota: aggiungi qualche voce.', 'error'); return; }
+  const full = `${t.title}\n${t.body}`;
+  if (mode === 'share' && navigator.share) {
+    try { await navigator.share({ title: t.title, text: full }); return; } catch (e) { if (e && e.name === 'AbortError') return; /* ripiego: copia */ }
+  }
+  toast((await copyText(full)) ? 'Lista copiata: incollala in Google Keep o dove vuoi.' : 'Non sono riuscito a copiare la lista.', '');
 }

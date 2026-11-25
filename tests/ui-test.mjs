@@ -264,6 +264,13 @@ await step('viaggio: crea, aggiunge budget, valigia e itinerario', async () => {
   await page.locator('.sheet input[placeholder^="es. Passaporto"]').fill('Passaporto');
   await page.getByRole('button', { name: '＋ Aggiungi', exact: true }).click();
   await page.waitForSelector('.chk:has-text("Passaporto")');
+  // la lista si può inviare ad altre app (Google Keep…): una voce per riga
+  await page.evaluate(() => { window.__sharedList = []; navigator.share = async (d) => { window.__sharedList.push(d); }; });
+  await page.getByRole('button', { name: /Invia la lista/ }).click();
+  await page.waitForFunction(() => window.__sharedList.length === 1);
+  const sl = await page.evaluate(() => window.__sharedList[0]);
+  assert.equal(sl.text, '🧳 Giappone 2027 — cose da portare\nPassaporto');
+  assert.ok(await page.getByRole('button', { name: /Copia la lista/ }).isVisible());
   await page.locator('.sheet input[placeholder^="Cosa fai"]').fill('Arrivo a Tokyo');
   await page.getByRole('button', { name: /Aggiungi all'itinerario/ }).click();
   await page.waitForSelector('.day-head');
