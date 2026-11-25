@@ -261,9 +261,54 @@ await step('viaggio: crea, aggiunge budget, valigia e itinerario', async () => {
   await page.locator('.sheet input[placeholder^="Importo"]').fill('850');
   await page.getByRole('button', { name: '＋ Aggiungi voce' }).click();
   await page.waitForSelector('text=Volo — ');
-  await page.locator('.sheet input[placeholder^="es. Passaporto"]').fill('Passaporto');
-  await page.getByRole('button', { name: '＋ Aggiungi', exact: true }).click();
-  await page.waitForSelector('.chk:has-text("Passaporto")');
+  // "Cose da portare": tendina stile Google Keep
+  await page.locator('details.pack > summary').click();
+  await page.locator('.sheet .pk-add').fill('Passaporto');
+  await page.locator('.sheet .pk-add').press('Enter');
+  await page.waitForSelector('.pk:has(input[aria-label="Depenna: Passaporto"])');
+  await page.locator('.sheet .pk-add').fill('Caricabatterie');
+  await page.locator('.sheet .pk-add').press('Enter');
+  await page.waitForSelector('.pk:has(input[aria-label="Depenna: Caricabatterie"])');
+  assert.ok(await page.locator('details.pack').evaluate((d) => d.open), 'la tendina resta aperta dopo aver aggiunto');
+  assert.equal(await page.locator('.pk-count .n-todo').innerText(), '2 da depennare');
+  assert.equal(await page.locator('.pk-count .n-done').innerText(), '0 fatte');
+  // voce doppia (anche con maiuscole/accenti diversi): la seconda diventa rossa
+  await page.locator('.sheet .pk-add').fill('passaporto ');
+  await page.locator('.sheet .pk-add').press('Enter');
+  await page.waitForFunction(() => document.querySelectorAll('.pk').length === 3);
+  assert.equal(await page.locator('.pk.dup').count(), 1);
+  assert.ok(await page.locator('.pk.dup .pk-dup').isVisible());
+  assert.equal(await page.locator('.pk.dup .pk-txt').inputValue(), 'passaporto');
+  assert.ok(await page.locator('.pk-count .n-dup').isVisible());
+  const dupColor = await page.locator('.pk.dup .pk-txt').evaluate((e) => getComputedStyle(e).color);
+  assert.match(dupColor, /^rgb\((1[6-9]\d|2\d\d), \d{1,2}, \d{1,2}\)$/, 'il testo doppio è rosso: ' + dupColor);
+  // incollare un elenco: una voce per riga, senza puntini
+  await page.locator('.sheet .pk-add').evaluate((inp) => {
+    const dt = new DataTransfer(); dt.setData('text', '- [ ] Crema solare\n• Cuffie\n\n3) Ombrello');
+    inp.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await page.waitForFunction(() => document.querySelectorAll('.pk').length === 6);
+  assert.ok(await page.locator('.pk:has(input[aria-label="Depenna: Crema solare"]) .pk-txt').inputValue() === 'Crema solare');
+  // depennare: la voce passa in "Già in valigia" e i conti si aggiornano
+  await page.locator('.pk input[aria-label="Depenna: Cuffie"]').check();
+  await page.waitForSelector('.pk.done:has(input[aria-label="Depenna: Cuffie"])');
+  assert.equal(await page.locator('.pk-count .n-todo').innerText(), '5 da depennare');
+  assert.equal(await page.locator('.pk-count .n-done').innerText(), '1 fatte');
+  assert.ok(await page.getByText('Già in valigia (1)').isVisible());
+  // il riassunto sulla riga chiusa riporta i conti
+  await page.locator('details.pack > summary').click();
+  assert.match(await page.locator('details.pack > summary .badge').innerText(), /5 da depennare · 1 fatte/);
+  await page.locator('details.pack > summary').click();
+  // tolgo le voci in più per tornare alla lista di prova
+  for (const nm of ['Crema solare', 'Ombrello']) await page.locator(`.pk:has(input[aria-label="Depenna: ${nm}"]) .x-btn`).click();
+  await page.waitForFunction(() => document.querySelectorAll('.pk').length === 4);
+  await page.locator('.pk:has(input[aria-label="Depenna: Cuffie"]) .x-btn').click();
+  await page.waitForFunction(() => document.querySelectorAll('.pk').length === 3);
+  await page.locator('.pk.dup .x-btn').click();
+  await page.waitForFunction(() => document.querySelectorAll('.pk').length === 2);
+  assert.equal(await page.locator('.pk.dup').count(), 0);
+  await page.locator('.pk:has(input[aria-label="Depenna: Caricabatterie"]) .x-btn').click();
+  await page.waitForFunction(() => document.querySelectorAll('.pk').length === 1);
   // la lista si può inviare ad altre app (Google Keep…): una voce per riga
   await page.evaluate(() => { window.__sharedList = []; navigator.share = async (d) => { window.__sharedList.push(d); }; });
   await page.getByRole('button', { name: /Invia la lista/ }).click();
@@ -276,7 +321,7 @@ await step('viaggio: crea, aggiunge budget, valigia e itinerario', async () => {
   await page.waitForSelector('.day-head');
   assert.match(await sheet().innerText(), /850/);
   assert.match(await sheet().innerText(), /Arrivo a Tokyo/);
-  assert.match(await sheet().innerText(), /0\/1/);
+  assert.match(await sheet().innerText(), /1 da depennare · 0 fatte/);
   await page.screenshot({ path: `${SHOTS}/viaggio.png` });
   await page.goBack();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);

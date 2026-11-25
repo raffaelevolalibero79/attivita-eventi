@@ -141,6 +141,7 @@ details.sec > .sec-body { padding: 4px 12px 14px; display: flex; flex-direction:
 .sheet-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
 .sheet-head h2 { flex: 1; font-size: 18px; overflow-wrap: anywhere; }
 .sheet-body { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; overscroll-behavior: contain; }
+.sheet-body > * { flex-shrink: 0; }
 .sheet-foot { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); display: flex; gap: 10px; flex-wrap: wrap; }
 .sheet-foot > * { flex: 1; min-width: 120px; }
 .btn { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px; font-weight: 600; min-height: 46px; text-align: center; }
@@ -208,3 +209,24 @@ ul.news li { margin: 3px 0; }
 .news[hidden] { display: none; }
 .news .btn { margin-left: auto; background: #fff; }
 .tag.new { background: #ffe066; border-color: #f0c93a; color: #5c4400; font-weight: 700; }
+/* Cose da portare: elenco compatto stile Google Keep */
+details.sec.pack { margin-bottom: 0; background: var(--card2); }
+details.sec.pack > summary { min-height: 46px; font-size: 16px; }
+.pk-count { display: flex; gap: 14px; flex-wrap: wrap; font-size: 14px; font-weight: 600; padding: 2px 2px 6px; }
+.pk-count .n-todo { color: var(--text); }
+.pk-count .n-done { color: var(--ok); }
+.pk-count .n-dup { color: var(--danger); }
+.pk-list { display: flex; flex-direction: column; gap: 0; }
+.pk { display: flex; align-items: center; gap: 8px; padding: 0 2px; min-height: 38px; border-bottom: 1px solid rgba(0,0,0,.05); }
+.pk input[type=checkbox] { width: 22px; height: 22px; min-height: 0; flex: none; }
+.pk .pk-txt { flex: 1; min-width: 0; border: 0; background: transparent; padding: 6px 4px; min-height: 36px; font-size: 16px; border-radius: 6px; }
+.pk .pk-txt:focus { background: #fff; outline: 2px solid var(--accent); }
+.pk.done .pk-txt { text-decoration: line-through; color: var(--muted); }
+.pk.dup .pk-txt { color: var(--danger); font-weight: 700; }
+.pk.dup { background: rgba(201,42,42,.08); }
+.pk-dup { color: var(--danger); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.pk-add { border: 0; border-bottom: 2px solid var(--line); border-radius: 0; background: transparent; padding: 10px 4px; min-height: 42px; width: 100%; font-size: 16px; }
+.pk-add:focus { outline: none; border-bottom-color: var(--accent); }
+details.sec.pack > summary { gap: 8px; }
+details.sec.pack > summary .badge { font-size: 12px; white-space: nowrap; margin-left: auto; padding: 2px 8px; }
+details.sec.pack > summary::after { margin-left: 0; }

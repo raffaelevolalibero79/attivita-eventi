@@ -249,4 +249,14 @@ t('lista "cose da portare" per Google Keep: una voce per riga, solo quelle non a
   assert.equal(packingText({ name: 'X', packing: [] }).count, 0);
   assert.equal(packingText(null).count, 0);
 });
+t('cose da portare: chiave, doppioni e incolla di un elenco', () => {
+  assert.equal(U.packKey('  Caffè  '), 'caffe');
+  assert.equal(U.packKey('Crema-solare!'), 'crema solare');
+  const l = [{ id: 'a', text: 'Passaporto' }, { id: 'b', text: 'passaporto ' }, { id: 'c', text: 'Cuffie' }, { id: 'd', text: 'PASSAPORTO' }];
+  assert.deepEqual([...U.packDupIds(l)].sort(), ['b', 'd']);   // la prima resta normale
+  assert.equal(U.packDupIds([{ id: 'x', text: 'Uno' }, { id: 'y', text: 'Due' }]).size, 0);
+  assert.deepEqual(U.parsePackText('- [ ] Passaporto\n• Cavo USB\n☐ Crema\n\n2) Scarpe\n  [x] Giacca'), ['Passaporto', 'Cavo USB', 'Crema', 'Scarpe', 'Giacca']);
+  assert.deepEqual(U.parsePackText(''), []);
+  assert.equal(U.parsePackText('x'.repeat(500))[0].length, 200);
+});
 console.log(`\n${n} test superati`);

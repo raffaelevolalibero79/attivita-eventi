@@ -3,9 +3,16 @@
 //   • secondo numero = funzione nuova o cambiata in modo visibile
 //   • terzo numero  = piccola correzione
 // Il numero va tenuto uguale anche in sw.js (lo controlla il test automatico).
-export const APP_VERSION = '1.7.0';
-export const APP_DATE = '2026-11-21';
+export const APP_VERSION = '1.8.0';
+export const APP_DATE = '2026-11-25';
 export const CHANGELOG = [
+  { v: '1.8.0', d: '2026-11-25', items: [
+    '"Cose da portare" ora è una tendina con elenco compatto stile Google Keep: scrivi una voce e premi Invio, spunti la casella per depennare (la voce scende in "Già in valigia"), tocchi il testo per correggerlo.',
+    'Contatori sempre visibili: quante voci restano da depennare e quante sono già fatte.',
+    'Se scrivi due volte la stessa voce (anche con maiuscole o accenti diversi) la seconda compare in rosso con la scritta "doppia".',
+    'Se incolli un elenco di più righe (anche da Keep) diventa una voce per riga.',
+    'Nelle finestre l\'elenco non torna più in cima a ogni modifica e le sezioni in fondo non si schiacciano più.',
+  ] },
   { v: '1.7.0', d: '2026-11-25', items: [
     'Viaggi → "Cose da portare": nuovi bottoni "Invia la lista (Google Keep…)" e "Copia la lista". Il menu di Android permette di scegliere Google Keep, WhatsApp, e-mail. Si inviano le voci non ancora messe in valigia.',
   ] },

@@ -406,6 +406,7 @@ export function openTripView(ctx, id) {
   const get = () => ctx.data().trips.find((t) => t.id === id);
   if (!get()) return null;
   const update = (fn) => { const t = clone(get()); fn(t); ctx.store.put('trips', t); };
+  let packOpen = false, refocusPack = false;      // la tendina resta aperta mentre scrivi e il cursore resta sulla riga di inserimento
   const render = (t, sh) => {
     const items = [...ctx.data().allPlaces.filter((p) => p.tripId === id).map((p) => ({ kind: 'place', p })), ...ctx.data().allEvents.filter((e) => e.tripId === id).map((e) => ({ kind: 'event', e }))];
     const out = [];
@@ -477,27 +478,53 @@ export function openTripView(ctx, id) {
         bLabel.value = ''; bAmt.value = '';
       } })));
 
-    // --- valigia ---
-    const done = t.packing.filter((p) => p.done).length;
-    out.push(el('div', { class: 'sub', text: `Cose da portare — ${done}/${t.packing.length}` }));
-    for (const p of t.packing) {
-      out.push(el('div', { class: 'chk' + (p.done ? ' done' : '') },
-        el('input', { type: 'checkbox', checked: p.done, 'aria-label': p.text, onchange: (e) => update((x) => { x.packing.find((y) => y.id === p.id).done = e.target.checked; }) }),
-        el('span', { text: p.text }),
-        el('button', { type: 'button', class: 'x-btn', 'aria-label': 'Togli', text: '✕', onclick: () => update((x) => { x.packing = x.packing.filter((y) => y.id !== p.id); }) })));
+    // --- valigia: elenco a tendina "stile Google Keep" ---
+    const pack = t.packing;
+    const dups = U.packDupIds(pack);
+    const todo = pack.filter((p) => !p.done), done = pack.filter((p) => p.done);
+    const addItems = (texts) => {
+      const clean = texts.map((x) => String(x).trim()).filter(Boolean);
+      if (!clean.length) return;
+      refocusPack = true;
+      update((x) => { for (const tx of clean) x.packing.push({ id: U.uid(), text: tx.slice(0, 200), done: false }); });
+    };
+    const row = (p) => el('div', { class: 'pk' + (p.done ? ' done' : '') + (dups.has(p.id) ? ' dup' : '') },
+      el('input', { type: 'checkbox', checked: p.done, 'aria-label': `Depenna: ${p.text}`, onchange: (e) => update((x) => { x.packing.find((y) => y.id === p.id).done = e.target.checked; }) }),
+      el('input', { type: 'text', class: 'pk-txt', value: p.text, maxlength: '200', 'aria-label': 'Voce', enterkeyhint: 'done',
+        onchange: (e) => { const v = e.target.value.trim(); update((x) => { if (!v) x.packing = x.packing.filter((y) => y.id !== p.id); else x.packing.find((y) => y.id === p.id).text = v.slice(0, 200); }); },
+        onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } } }),
+      dups.has(p.id) ? el('span', { class: 'pk-dup', text: 'doppia' }) : null,
+      el('button', { type: 'button', class: 'x-btn', 'aria-label': `Togli: ${p.text}`, text: '✕', onclick: () => update((x) => { x.packing = x.packing.filter((y) => y.id !== p.id); }) }));
+    const addInp = el('input', { type: 'text', class: 'pk-add', placeholder: '＋ Aggiungi una voce e premi Invio', maxlength: '200', enterkeyhint: 'done', autocomplete: 'off',
+      onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); const v = addInp.value; addInp.value = ''; addItems([v]); } },
+      onpaste: (e) => {
+        const txt = (e.clipboardData && e.clipboardData.getData('text')) || '';
+        if (/\r?\n/.test(txt)) { e.preventDefault(); addItems(U.parsePackText(txt)); }      // incolli un elenco intero: una voce per riga
+      },
+      onblur: () => { const v = addInp.value.trim(); if (v) { addInp.value = ''; addItems([v]); } } });
+    const counts = el('div', { class: 'pk-count' },
+      el('span', { class: 'n-todo', text: `${todo.length} da depennare` }),
+      el('span', { class: 'n-done', text: `${done.length} fatte` }),
+      dups.size ? el('span', { class: 'n-dup', text: `${dups.size} ${dups.size === 1 ? 'doppia' : 'doppie'}` }) : null);
+    const body = [counts, el('div', { class: 'pk-list' }, todo.map(row)), addInp];
+    if (done.length) {
+      body.push(el('div', { class: 'sub', text: `Già in valigia (${done.length})` }), el('div', { class: 'pk-list' }, done.map(row)),
+        el('button', { type: 'button', class: 'btn small', text: 'Togli le voci depennate', onclick: async () => {
+          if (await confirmDialog(`Togliere dalla lista le ${done.length} voci già depennate?`, { ok: 'Togli' })) update((x) => { x.packing = x.packing.filter((y) => !y.done); });
+        } }));
     }
-    const pText = text('', 'es. Passaporto, caricabatterie');
-    out.push(el('div', { class: 'field' }, pText, el('button', { type: 'button', class: 'btn small', text: '＋ Aggiungi', onclick: () => {
-      if (!pText.value.trim()) return;
-      update((x) => { x.packing.push({ id: U.uid(), text: pText.value.trim(), done: false }); });
-      pText.value = '';
-    } })));
-    // mandare la lista ad altre app: nel menu di Android si sceglie Google Keep (o WhatsApp, e-mail…)
-    if (t.packing.length) {
-      out.push(el('div', { class: 'seg' },
+    if (pack.length) {
+      body.push(el('div', { class: 'seg' },
         el('button', { type: 'button', class: 'btn small', text: '📤 Invia la lista (Google Keep…)', onclick: () => sharePacking(t, 'share') }),
         el('button', { type: 'button', class: 'btn small', text: '📋 Copia la lista', onclick: () => sharePacking(t, 'copy') })));
     }
+    const sumTxt = pack.length ? `${todo.length} da depennare · ${done.length} fatte` : 'vuota';
+    const det = el('details', { class: 'sec pack' }, el('summary', null, '🧳 Cose da portare', el('span', { class: 'badge', text: sumTxt })), el('div', { class: 'sec-body' }, body));
+    det.open = packOpen;
+    // lo stato aperto/chiuso lo segno subito al tocco (l'evento "toggle" arriva dopo e una modifica intanto lo richiuderebbe)
+    det.firstChild.addEventListener('click', () => { packOpen = !det.open; });
+    out.push(det);
+    if (refocusPack) { refocusPack = false; setTimeout(() => { try { addInp.focus({ preventScroll: true }); } catch { /* ignora */ } }, 0); }
     return out;
   };
   return liveSheet(ctx, { title: (t) => `🧳 ${t.name}`, render, getItem: get });

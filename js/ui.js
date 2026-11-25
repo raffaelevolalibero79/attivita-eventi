@@ -98,7 +98,7 @@ export function openSheet({ title = '', body = null, footer = null, onClose = nu
   const api = {
     el: sheet, body: bodyEl, footer: footEl, overlay,
     setTitle: (t) => { titleEl.textContent = t; },
-    setBody: (...nodes) => { clear(bodyEl); append(bodyEl, nodes); },
+    setBody: (...nodes) => { const st = bodyEl.scrollTop; clear(bodyEl); append(bodyEl, nodes); bodyEl.scrollTop = st; },
     hide: (on) => overlay.classList.toggle('hide', !!on),
     close() { if (guard && guard()) askDiscard().then((ok) => { if (ok) api.forceClose(); }); else api.forceClose(); },
     forceClose() { entry.dispose(); releaseSentinel(); },

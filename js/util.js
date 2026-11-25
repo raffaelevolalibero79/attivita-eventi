@@ -561,3 +561,21 @@ export function eventFromExtracted(x, source) {
   if (!String(x.title || '').trim()) doc.title = '';      // niente "Senza titolo" da cancellare: il campo resta vuoto da compilare
   return doc;
 }
+
+// ---------- lista "Cose da portare": voci doppie ----------
+// Due voci sono "uguali" se, ignorando maiuscole, accenti, punteggiatura e spazi in più, dicono la stessa cosa.
+export const packKey = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+// id delle voci che ripetono una voce già comparsa prima nella lista (la prima resta normale, le successive sono "doppie")
+export function packDupIds(list) {
+  const seen = new Set(), dup = new Set();
+  for (const p of list || []) {
+    const k = packKey(p && p.text);
+    if (!k) continue;
+    if (seen.has(k)) dup.add(p.id); else seen.add(k);
+  }
+  return dup;
+}
+// Testo incollato (anche da Google Keep o WhatsApp) → voci separate: una per riga, senza elenchi puntati o caselle
+export function parsePackText(raw) {
+  return String(raw || '').split(/\r?\n/).map((l) => l.replace(/^\s*(?:[-*•·▪◦☐☑✓✔□■]\s*)?(?:\[[ xX]?\]\s*)?(?:\d+[.)]\s*)?/u, '').replace(/\s+/g, ' ').trim()).filter(Boolean).map((t) => t.slice(0, 200)).slice(0, 300);
+}
