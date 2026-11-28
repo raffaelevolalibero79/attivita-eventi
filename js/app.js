@@ -10,6 +10,7 @@ import { openAddMenu, readImage, readText, openPlaceFromMaps, pickImageFromUser,
 import { loadSeen, isNew as isNewDoc, markSeen as markSeenDoc, markAllSeen, describe } from './news.js';
 import { openSettings, getHome, getSettings, statusText } from './settings.js';
 import { getPosition, reverseGeocode } from './geo.js';
+import { initEditTools } from './edittools.js';
 
 const FILTER_KEY = 'ae.filters';
 const defaultFilters = () => ({ cats: [...U.CAT_KEYS], status: 'all', km: 0, trip: '', q: '', more: false });
@@ -26,6 +27,7 @@ function loadFilters() {
 const saveFilters = (f) => { try { localStorage.setItem(FILTER_KEY, JSON.stringify({ v: 2, cats: f.cats, status: f.status, km: f.km })); } catch { /* ignora */ } };
 
 async function main() {
+  initEditTools();
   const store = createStore();
   const gate = $('#gate');
   const showGate = (...kids) => { clear(gate).append(...kids); gate.hidden = false; };

@@ -5,6 +5,7 @@ import { el, clear, openSheet, toast, pickFile } from './ui.js';
 import * as U from './util.js';
 import { geocode, geocodePlace, reverseGeocode, getPosition } from './geo.js';
 import { getSettings } from './settings.js';
+import { resolveMapsLink } from './mapsresolver.js';
 
 const MAX_FILE = 30 * 1024 * 1024;
 
@@ -197,60 +198,82 @@ export async function readText(raw, progress = () => {}) {
 }
 
 // ---------- posizione da Google Maps ----------
-// Cosa arriva da Google Maps (tasto Condividi) di solito è: nome, indirizzo e un link breve (maps.app.goo.gl).
-// Il link breve non si può aprire da un'app, quindi si usano nome e indirizzo; se si incollano le coordinate, sono esatte.
-export async function placeFromMaps(raw, { near = null } = {}) {
+// Cosa arriva da Google Maps (tasto Condividi) di solito è: nome e un link breve (maps.app.goo.gl), a volte anche l'indirizzo.
+// Il link breve non dice dove si trova il posto e un'app non può aprirlo da sola:
+//  • con il "lettore dei link" (creato una volta nelle Impostazioni) si legge la posizione vera, esatta;
+//  • senza, si cerca per nome/indirizzo e — se manca l'indirizzo — si chiede sempre di confermare il posto trovato.
+// Se si incollano le coordinate, sono esatte.
+export async function placeFromMaps(raw, { near = null, resolverUrl = '', resolve = resolveMapsLink } = {}) {
   const shared = U.parseSharedPlaceText(raw);
   const safe = shared.urls.map(U.safeUrl).filter(Boolean);
   const url = safe.find((u) => U.linkKind(u) === 'maps') || safe[0] || '';
   const parsed = url ? U.parseMapsUrl(url) : null;
   const draft = { name: '', address: '', lat: null, lng: null, link: url, category: 'vedere' };
-  let note = '', candidates = [];
+  let note = '', candidates = [], hint = '', exact = false;
   const coords = U.parseCoords(raw);
-  if (parsed && !parsed.short && parsed.lat != null) { draft.lat = parsed.lat; draft.lng = parsed.lng; draft.name = parsed.name || ''; draft.address = parsed.query || ''; }
+  if (parsed && !parsed.short && parsed.lat != null) { draft.lat = parsed.lat; draft.lng = parsed.lng; draft.name = parsed.name || ''; draft.address = parsed.query || ''; exact = true; }
   else if (parsed && !parsed.short) { draft.name = parsed.name || ''; draft.address = parsed.query || ''; }
   if (!draft.name) draft.name = shared.name && !/^https?:/i.test(shared.name) ? shared.name : '';
   if (!draft.address) draft.address = shared.address;
-  if (draft.lat == null && coords) { draft.lat = coords.lat; draft.lng = coords.lng; note = 'Posizione presa dalle coordinate: è quella esatta.'; }
+  if (draft.lat == null && coords) { draft.lat = coords.lat; draft.lng = coords.lng; note = 'Posizione presa dalle coordinate: è quella esatta.'; exact = true; }
+  const shortLink = !!(parsed && parsed.short);
+  if (draft.lat == null && shortLink && resolverUrl) {
+    try {
+      const r = await resolve(url, resolverUrl);
+      if (r.name && !draft.name) draft.name = r.name;
+      if (r.lat != null) { draft.lat = r.lat; draft.lng = r.lng; exact = true; note = 'Posizione letta dal link di Google Maps: è quella esatta.'; }
+      else hint = 'Il lettore ha trovato il nome ma non la posizione esatta. ';
+    } catch (e) { hint = `${e.message}. `; }
+  }
   if (draft.lat == null) {
+    const hadAddress = !!draft.address;
     let err = '';
     try { candidates = await geocodePlace(draft.name, draft.address, { near }); } catch (e) { err = e.message; }
-    if (candidates.length === 1) {
+    if (candidates.length === 1 && hadAddress) {
       const r = candidates[0];
       draft.lat = r.lat; draft.lng = r.lng; if (!draft.address) draft.address = r.label; if (!draft.name) draft.name = r.name;
       note = 'Posizione trovata dal nome e dall\'indirizzo: controllala sulla mappa.';
-    } else if (!candidates.length) {
-      const onlyShort = safe.some((x) => { const m = U.parseMapsUrl(x); return m && m.short; }) && !draft.name && !draft.address;
+      candidates = [];
+    } else if (candidates.length) {
+      // cercato solo per nome (o più risultati): meglio far scegliere, perché può esistere un posto con lo stesso nome in un'altra città
+      hint += shortLink && !resolverUrl
+        ? 'Il link breve di Google Maps non dice dove si trova il posto, quindi ho cercato solo per nome: controlla che sia quello giusto. Per avere sempre la posizione esatta attiva il "lettore dei link" nelle Impostazioni. '
+        : 'Controlla che sia quello giusto. ';
+    } else {
+      const onlyShort = shortLink && !draft.name && !draft.address;
       note = err ? `${err} ` : '';
       note += onlyShort
-        ? 'Google non permette di aprire il link breve e nel testo condiviso non c\'è né il nome né l\'indirizzo. In Google Maps tieni premuto sul punto, copia le coordinate (i due numeri in alto) e incollale in "Link di Google Maps"; oppure usa "Scelgo sulla mappa".'
+        ? 'Google non permette di aprire il link breve e nel testo condiviso non c\'è né il nome né l\'indirizzo. Attiva il "lettore dei link" nelle Impostazioni, oppure in Google Maps tieni premuto sul punto, copia le coordinate (i due numeri in alto) e incollale in "Link di Google Maps"; oppure usa "Scelgo sulla mappa".'
         : 'Non ho trovato la posizione: usa "Trova da indirizzo", incolla le coordinate da Google Maps, oppure "Scelgo sulla mappa".';
+      if (hint) note = hint + note;
     }
   }
-  return { draft, note, candidates: candidates.length > 1 ? candidates : [] };
+  return { draft, note, candidates, hint };
 }
 
-// Apre la scheda del luogo; se ci sono più posti possibili chiede prima quale è quello giusto.
+// Apre la scheda del luogo; se ci sono dei posti possibili chiede prima quale è quello giusto.
 export async function openPlaceFromMaps(ctx, raw) {
   const home = ctx.home();
-  const r = await placeFromMaps(raw, { near: home });
+  const { resolverUrl } = getSettings();
+  const r = await placeFromMaps(raw, { near: home, resolverUrl });
   const finish = (pick) => {
     const d = { ...r.draft };
     let note = r.note;
     if (pick) { d.lat = pick.lat; d.lng = pick.lng; if (!d.address) d.address = pick.label; if (!d.name) d.name = pick.name; note = 'Posizione scelta da te: controllala sulla mappa.'; }
     else if (r.candidates.length) note = 'Nessuna posizione scelta: usa "Trova da indirizzo", incolla le coordinate oppure "Scelgo sulla mappa".';
-    ctx.openPlaceForm(d, { isNew: true, note });
+    ctx.openPlaceForm(d, { isNew: true, note, noAuto: true });   // la ricerca l'abbiamo già fatta noi: la scheda non deve rifarla e scegliere da sola
   };
   if (!r.candidates.length) return finish(null);
   const km = (x) => (x.km != null ? ` · a ${x.km < 10 ? x.km.toFixed(1) : Math.round(x.km)} km da casa` : '');
+  const one = r.candidates.length === 1;
   const list = el('div', { class: 'menu-list' },
     ...r.candidates.map((x) => el('button', { type: 'button', class: 'btn', onclick: () => { sh.forceClose(); finish(x); } }, el('span', null, x.name || x.label.split(',')[0], el('small', { text: x.label + km(x) })))),
-    el('button', { type: 'button', class: 'btn', onclick: () => { sh.forceClose(); finish(null); } }, el('span', null, 'Nessuno di questi', el('small', { text: 'Apri la scheda senza posizione e scegli tu' }))));
-  const sh = openSheet({ title: 'Quale di questi posti è?', body: [el('div', { class: 'hint', text: `Ho trovato più posti per "${[r.draft.name, r.draft.address].filter(Boolean).join(', ')}". Tocca quello giusto.` }), list] });
+    el('button', { type: 'button', class: 'btn', onclick: () => { sh.forceClose(); finish(null); } }, el('span', null, one ? 'No, non è questo' : 'Nessuno di questi', el('small', { text: 'Apri la scheda senza posizione e scegli tu' }))));
+  const what = [r.draft.name, r.draft.address].filter(Boolean).join(', ');
+  const sh = openSheet({ title: one ? 'È questo il posto?' : 'Quale di questi posti è?', body: [el('div', { class: 'hint', text: `${r.hint || ''}${one ? `Ho trovato questo posto per "${what}". Tocca per confermare.` : `Ho trovato più posti per "${what}". Tocca quello giusto.`}` }), list] });
   return sh;
 }
 
-// ---------- menu del pulsante + ----------
 export function openAddMenu(ctx, { forDate = '' } = {}) {
   let sh;
   const item = (ico, title, sub, fn) => el('button', { type: 'button', class: 'btn', onclick: () => { sh.forceClose(); fn(); } },

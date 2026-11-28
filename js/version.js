@@ -3,9 +3,14 @@
 //   • secondo numero = funzione nuova o cambiata in modo visibile
 //   • terzo numero  = piccola correzione
 // Il numero va tenuto uguale anche in sw.js (lo controlla il test automatico).
-export const APP_VERSION = '1.8.0';
-export const APP_DATE = '2026-11-25';
+export const APP_VERSION = '1.9.0';
+export const APP_DATE = '2026-11-28';
 export const CHANGELOG = [
+  { v: '1.9.0', d: '2026-11-28', items: [
+    'In ogni campo dove si scrive compare una barra con "Incolla", "Copia", "Taglia" e "Seleziona tutto" (anche quando il menu del telefono non esce).',
+    'Link di Google Maps: nuovo "lettore dei link" gratuito (si crea una volta sola dalle Impostazioni, nel tuo account Google) che legge la posizione vera dietro il link breve, così il posto non viene più scambiato con uno omonimo in un\'altra città.',
+    'Se il lettore non c\'è e il testo condiviso ha solo il nome, l\'app non sceglie più da sola: mostra il posto trovato (anche uno solo) e chiede conferma.',
+  ] },
   { v: '1.8.0', d: '2026-11-25', items: [
     '"Cose da portare" ora è una tendina con elenco compatto stile Google Keep: scrivi una voce e premi Invio, spunti la casella per depennare (la voce scende in "Già in valigia"), tocchi il testo per correggerlo.',
     'Contatori sempre visibili: quante voci restano da depennare e quante sono già fatte.',

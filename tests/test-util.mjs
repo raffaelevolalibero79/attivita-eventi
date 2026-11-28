@@ -3,9 +3,13 @@ import * as U from '../js/util.js';
 import { readFileSync } from 'node:fs';
 import { APP_VERSION, CHANGELOG } from '../js/version.js';
 import { locationLinks, hasLocation, packingText } from '../js/sharelinks.js';
+import vm from 'node:vm';
+import { RESOLVER_CODE } from '../js/resolvercode.js';
+import { isResolverUrl, resolveMapsLink, pingResolver } from '../js/mapsresolver.js';
 import { authorLabel, loadSeen, isNew, markSeen, markAllSeen, describe } from '../js/news.js';
 
 let n = 0;
+const ta = async (name, fn) => { try { await fn(); n++; console.log('ok  ', name); } catch (e) { console.error('FAIL', name, '\n  ', e.message); process.exitCode = 1; } };
 const t = (name, fn) => { try { fn(); n++; console.log('ok  ', name); } catch (e) { console.error('FAIL', name, '\n  ', e.message); process.exitCode = 1; } };
 
 t('date base', () => {
@@ -258,5 +262,72 @@ t('cose da portare: chiave, doppioni e incolla di un elenco', () => {
   assert.deepEqual(U.parsePackText('- [ ] Passaporto\n• Cavo USB\n☐ Crema\n\n2) Scarpe\n  [x] Giacca'), ['Passaporto', 'Cavo USB', 'Crema', 'Scarpe', 'Giacca']);
   assert.deepEqual(U.parsePackText(''), []);
   assert.equal(U.parsePackText('x'.repeat(500))[0].length, 200);
+});
+
+// ---- lettore dei link di Google Maps ----
+const RES = 'https://script.google.com/macros/s/AKfycbxTESTTESTTEST123/exec';
+const fakeFetch = (obj, ok = true) => async (u) => { fakeFetch.last = u; return { ok, status: ok ? 200 : 500, json: async () => obj }; };
+const runScript = (pages, query) => {
+  const calls = [];
+  const sandbox = {
+    UrlFetchApp: { fetch: (url) => { calls.push(url); const pg = pages[url]; if (!pg) throw new Error('rete non permessa: ' + url); return { getResponseCode: () => pg.code, getHeaders: () => pg.headers || {}, getContentText: () => pg.body || '' }; } },
+    ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (t) => ({ t, setMimeType() { return this; } }) },
+  };
+  const doGet = vm.runInNewContext(RESOLVER_CODE + '\n;doGet', sandbox);
+  return { out: JSON.parse(doGet({ parameter: query }).t), calls };
+};
+t('lettore: riconosce solo l\'indirizzo giusto di Apps Script', () => {
+  assert.ok(isResolverUrl(RES));
+  assert.ok(!isResolverUrl('http://script.google.com/macros/s/AKfycbxTESTTESTTEST123/exec'));
+  assert.ok(!isResolverUrl('https://evil.example/macros/s/AKfycbxTESTTESTTEST123/exec'));
+  assert.ok(!isResolverUrl('https://script.google.com/macros/s/AKfycbxTESTTESTTEST123/dev'));
+  assert.ok(!isResolverUrl(''));
+});
+t('lettore (codice Apps Script): segue il link breve e legge le coordinate dall\'indirizzo finale', () => {
+  const final = 'https://www.google.com/maps/place/Paradiso+Perduto/@45.4457,12.3267,17z/data=!3m1!4b1!4m6!3m5!1s0x477eb:0x1!8m2!3d45.44571!4d12.32891';
+  const { out, calls } = runScript({
+    'https://maps.app.goo.gl/AbC123': { code: 302, headers: { Location: final } },
+    [final]: { code: 200, body: '<html><meta property="og:title" content="Paradiso Perduto · Fondamenta della Misericordia"></html>' },
+  }, { u: 'https://maps.app.goo.gl/AbC123' });
+  assert.equal(out.ok, true);
+  assert.deepEqual([out.lat, out.lng], [45.44571, 12.32891]);   // vince il punto esatto (!3d!4d), non il centro della mappa
+  assert.equal(out.title, 'Paradiso Perduto · Fondamenta della Misericordia');
+  assert.equal(calls.length, 2);
+});
+t('lettore (codice Apps Script): se nell\'indirizzo non ci sono coordinate le prende dalla pagina', () => {
+  const final = 'https://www.google.com/maps/place/Bar+Roma/data=!4m2!3m1!1s0xabc';
+  const html = '<meta content="https://maps.google.com/maps/api/staticmap?center=45.4%2C12.3&amp;zoom=15" itemprop="image">'.replace('45.4%2C12.3', '45.44570%2C12.32880');
+  const { out } = runScript({ 'https://maps.app.goo.gl/X': { code: 301, headers: { location: final } }, [final]: { code: 200, body: html } }, { u: 'https://maps.app.goo.gl/X' });
+  assert.deepEqual([out.lat, out.lng], [45.4457, 12.3288]);
+});
+t('lettore (codice Apps Script): rifiuta indirizzi che non sono di Google Maps e non esce dai siti ammessi', () => {
+  assert.equal(runScript({}, { u: 'https://example.com/qualcosa' }).out.ok, false);
+  assert.equal(runScript({}, { u: 'http://maps.app.goo.gl/AbC' }).out.ok, false);
+  assert.equal(runScript({}, { u: 'https://www.google.com/search?q=x' }).out.ok, false);
+  const { out, calls } = runScript({ 'https://maps.app.goo.gl/Y': { code: 302, headers: { Location: 'https://evil.example/steal' } } }, { u: 'https://maps.app.goo.gl/Y' });
+  assert.equal(calls.length, 1);                        // non segue il reindirizzamento verso un sito estraneo
+  assert.equal(out.lat, undefined);
+  assert.equal(runScript({}, { ping: '1' }).out.ping, true);
+});
+await ta('lettore (app): legge posizione e nome dalla risposta e non si fida di dati strani', async () => {
+  const good = await resolveMapsLink('https://maps.app.goo.gl/AbC123', RES, { fetchImpl: fakeFetch({ ok: true, url: 'https://www.google.com/maps/place/Paradiso+Perduto/@45.4457,12.3267,17z/data=!3d45.44571!4d12.32891', title: 'Paradiso Perduto · Fond.' }) });
+  assert.deepEqual([good.lat, good.lng, good.name], [45.44571, 12.32891, 'Paradiso Perduto']);
+  assert.ok(fakeFetch.last.startsWith(RES + '?u=' + encodeURIComponent('https://maps.app.goo.gl/AbC123')));
+  const onlyCoords = await resolveMapsLink('https://maps.app.goo.gl/AbC123', RES, { fetchImpl: fakeFetch({ ok: true, url: 'https://maps.app.goo.gl/zzz', lat: 45.1, lng: 11.2, title: 'Bar Sport · Via Roma 1' }) });
+  assert.deepEqual([onlyCoords.lat, onlyCoords.lng, onlyCoords.name], [45.1, 11.2, 'Bar Sport']);
+  const bad = await resolveMapsLink('https://maps.app.goo.gl/AbC123', RES, { fetchImpl: fakeFetch({ ok: true, lat: 999, lng: 11.2 }) });
+  assert.equal(bad.lat, null);
+  await assert.rejects(resolveMapsLink('https://maps.app.goo.gl/AbC123', RES, { fetchImpl: fakeFetch({ ok: false, error: 'Link non ammesso' }) }), /Link non ammesso/);
+  await assert.rejects(resolveMapsLink('https://maps.app.goo.gl/AbC123', RES, { fetchImpl: fakeFetch({}, false) }), /Lettore dei link/);
+  await assert.rejects(resolveMapsLink('https://example.com/x', RES, { fetchImpl: fakeFetch({ ok: true }) }), /link breve/);
+  await assert.rejects(resolveMapsLink('https://maps.app.goo.gl/AbC123', 'https://evil.example/exec', { fetchImpl: fakeFetch({ ok: true }) }), /non configurato/);
+  assert.equal(await pingResolver(RES, { fetchImpl: fakeFetch({ ok: true, ping: true }) }), true);
+  await assert.rejects(pingResolver(RES, { fetchImpl: fakeFetch({ ok: true }) }), /inatteso/);
+});
+t('lettore: il file nello zip legge solo Google, la CSP lo permette e il service worker lo conosce', () => {
+  const csp = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.ok(/connect-src[^;]*https:\/\/script\.google\.com/.test(csp) && /connect-src[^;]*https:\/\/script\.googleusercontent\.com/.test(csp));
+  const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  for (const f of ['edittools.js', 'mapsresolver.js', 'resolvercode.js']) assert.ok(sw.includes('./js/' + f), f);
 });
 console.log(`\n${n} test superati`);

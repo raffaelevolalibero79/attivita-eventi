@@ -243,7 +243,7 @@ export function openEventForm(ctx, draft = {}, { isNew = true, thumb = null, not
 // ============================================================
 //   LUOGO
 // ============================================================
-export function openPlaceForm(ctx, draft = {}, { isNew = true, thumb = null, note = '' } = {}) {
+export function openPlaceForm(ctx, draft = {}, { isNew = true, thumb = null, note = '', noAuto = false } = {}) {
   const d = U.sanitizeDoc('places', { ...draft });
   if (isNew) d.name = draft.name || '';
   let dirty = !!note || (isNew && !!draft.name);
@@ -284,7 +284,7 @@ export function openPlaceForm(ctx, draft = {}, { isNew = true, thumb = null, not
   sh = openSheet({ title: isNew ? 'Nuovo luogo' : 'Modifica luogo', body, footer, guard: () => dirty, backdropClose: false });
   sh.body.addEventListener('input', () => { dirty = true; });
   sh.body.addEventListener('change', () => { dirty = true; });
-  if (isNew && loc.geo.lat == null && (loc.addr.value.trim() || name.value.trim())) loc.autoFind();
+  if (isNew && !noAuto && loc.geo.lat == null && (loc.addr.value.trim() || name.value.trim())) loc.autoFind();
   return sh;
 }
 

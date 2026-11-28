@@ -25,3 +25,7 @@ export const CLAUDE_MODELS = {
   'claude-haiku-5-5': 'Haiku 5.5 — più economico (circa 0,0004 $ a foto)',
 };
 export const CLAUDE_DEFAULT_MODEL = 'claude-sonnet-5-5';
+
+// Indirizzo del "lettore dei link di Google Maps" (si crea una volta sola dalle Impostazioni dell'app).
+// Se lo scrivi qui vale per tutti i telefoni; se resta vuoto lo si può inserire nelle Impostazioni di ogni telefono.
+export const MAPS_RESOLVER_URL = '';

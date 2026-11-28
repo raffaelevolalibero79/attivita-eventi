@@ -1,13 +1,15 @@
 // settings.js — impostazioni personali (solo su questo telefono) e schermata Impostazioni.
 // Posizione di casa e chiave Claude NON vengono mai inviate al database condiviso.
 import { el, openSheet, toast, confirmDialog, field, select, downloadText, pickFile, clear } from './ui.js';
-import { CLAUDE_MODELS, CLAUDE_DEFAULT_MODEL, FIREBASE_CONFIG } from './config.js';
+import { CLAUDE_MODELS, CLAUDE_DEFAULT_MODEL, FIREBASE_CONFIG, MAPS_RESOLVER_URL } from './config.js';
+import { RESOLVER_CODE } from './resolvercode.js';
+import { isResolverUrl, pingResolver } from './mapsresolver.js';
 import { geocode, getPosition, reverseGeocode } from './geo.js';
 import { cloudConfigured, isLocalOnlyChosen, setLocalOnly } from './store.js';
 import { APP_VERSION, APP_DATE, CHANGELOG } from './version.js';
 
 const KEY = 'ae.settings';
-const DEFAULTS = { homeLat: null, homeLng: null, homeName: '', claudeKey: '', claudeModel: CLAUDE_DEFAULT_MODEL, useClaude: false, ocrAfterClaudeFail: true };
+const DEFAULTS = { homeLat: null, homeLng: null, homeName: '', claudeKey: '', claudeModel: CLAUDE_DEFAULT_MODEL, useClaude: false, ocrAfterClaudeFail: true, resolverUrl: '' };
 
 export function getSettings() {
   try {
@@ -18,6 +20,8 @@ export function getSettings() {
     if (typeof o.claudeKey === 'string' && /^[\w-]{10,300}$/.test(o.claudeKey)) s.claudeKey = o.claudeKey;
     if (CLAUDE_MODELS[o.claudeModel]) s.claudeModel = o.claudeModel;
     s.useClaude = !!o.useClaude && !!s.claudeKey;
+    const ru = typeof o.resolverUrl === 'string' ? o.resolverUrl.trim() : '';
+    s.resolverUrl = isResolverUrl(ru) ? ru : (isResolverUrl(MAPS_RESOLVER_URL) ? MAPS_RESOLVER_URL : '');
     return s;
   } catch { return { ...DEFAULTS }; }
 }
@@ -112,6 +116,40 @@ export function openSettings({ store, onChanged }) {
   };
   renderHome();
 
+  // --- Lettore dei link di Google Maps ---
+  const resInp = el('input', { type: 'text', autocomplete: 'off', placeholder: 'https://script.google.com/macros/s/…/exec', value: s0.resolverUrl, 'aria-label': 'Indirizzo del lettore' });
+  const resMsg = el('div', { class: 'hint' });
+  const say = (t, cls = 'hint') => { resMsg.className = cls; resMsg.textContent = t; };
+  const resBox = el('div', { class: 'field' },
+    el('div', { class: 'lbl', text: 'Lettore dei link di Google Maps (consigliato, gratuito)' }),
+    el('div', { class: 'hint', text: 'I link brevi di Google Maps (maps.app.goo.gl) non dicono dove si trova il posto: senza lettore l\'app cerca solo per nome e può trovare un posto con lo stesso nome in un\'altra città. Il lettore è un piccolo programma che crei una volta sola nel tuo account Google: segue il link e restituisce la posizione vera. Legge solo link di Google Maps e non salva niente.' }),
+    el('details', { class: 'fold' }, el('summary', { text: 'Come attivarlo (una volta sola, circa 5 minuti)' }),
+      el('ol', { class: 'steps' },
+        el('li', { text: 'Tocca qui sotto "Copia il codice".' }),
+        el('li', { text: 'Apri script.google.com con il tuo account Google (da telefono: menu del browser → "Sito desktop") e tocca "Nuovo progetto".' }),
+        el('li', { text: 'Cancella il codice che c\'è e incolla quello copiato. Tocca l\'icona del dischetto per salvare.' }),
+        el('li', { text: 'Tocca "Distribuisci" → "Nuova distribuzione" → icona ingranaggio → "App web". In "Esegui come" scegli "Io"; in "Chi ha accesso" scegli "Chiunque". Poi "Distribuisci".' }),
+        el('li', { text: 'Quando chiede "Autorizza accesso": scegli il tuo account → "Avanzate" → "Vai a … (non sicuro)" → "Consenti". È il tuo programma: non è "non sicuro", Google lo scrive per tutti i programmi non pubblicati.' }),
+        el('li', { text: 'Copia l\'"URL dell\'app web" che compare e incollalo qui sotto, poi tocca "Salva" e "Prova".' }))),
+    el('button', { type: 'button', class: 'btn small', text: '📋 Copia il codice', onclick: async () => {
+      try { await navigator.clipboard.writeText(RESOLVER_CODE); say('Codice copiato: ora incollalo in Google Apps Script (punto 3).'); }
+      catch { say('Non riesco a copiare automaticamente.', 'warn'); }
+    } }),
+    field('Indirizzo del lettore (URL dell\'app web)', resInp),
+    el('div', { class: 'seg' },
+      el('button', { type: 'button', class: 'btn small', text: 'Salva', onclick: () => {
+        const v = resInp.value.trim();
+        if (v && !isResolverUrl(v)) return say('L\'indirizzo non sembra giusto: deve iniziare con https://script.google.com/macros/s/ e finire con /exec', 'warn');
+        saveSettings({ resolverUrl: v }); say(v ? 'Salvato su questo telefono.' : 'Lettore tolto.'); onChanged();
+      } }),
+      el('button', { type: 'button', class: 'btn small', text: 'Prova', onclick: async (e) => {
+        const b = e.currentTarget; b.disabled = true; say('Provo…');
+        try { await pingResolver(resInp.value.trim()); say('✔ Il lettore risponde. Premi "Salva" se non l\'hai ancora fatto.'); }
+        catch (er) { say(`Il lettore non risponde: ${er.message}`, 'warn'); }
+        finally { b.disabled = false; }
+      } })),
+    resMsg);
+
   // --- Claude ---
   const keyInp = el('input', { type: 'password', autocomplete: 'off', placeholder: 'sk-ant-…', value: s0.claudeKey });
   const modelSel = select(Object.entries(CLAUDE_MODELS), s0.claudeModel);
@@ -154,7 +192,7 @@ export function openSettings({ store, onChanged }) {
 
   const news = el('details', { class: 'fold' }, el('summary', { text: 'Novità delle versioni' }),
     ...CHANGELOG.map((c) => el('div', null, el('div', { class: 'sub', text: `Versione ${c.v} · ${c.d}` }), el('ul', { class: 'news' }, c.items.map((t) => el('li', { text: t }))))));
-  append2(body, accBox, homeBox, claudeBox, backupBox,
+  append2(body, accBox, homeBox, resBox, claudeBox, backupBox,
     el('div', { class: 'hint', text: `Versione ${APP_VERSION} (${APP_DATE}) · progetto sincronizzazione: ${FIREBASE_CONFIG.projectId || 'non collegato'}${isLocalOnlyChosen() ? ' (disattivata)' : ''}` }), news);
 
   const sh = openSheet({ title: 'Impostazioni', body });

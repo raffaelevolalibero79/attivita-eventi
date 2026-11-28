@@ -230,3 +230,10 @@ details.sec.pack > summary { min-height: 46px; font-size: 16px; }
 details.sec.pack > summary { gap: 8px; }
 details.sec.pack > summary .badge { font-size: 12px; white-space: nowrap; margin-left: auto; padding: 2px 8px; }
 details.sec.pack > summary::after { margin-left: 0; }
+
+/* barra Incolla / Copia / Taglia / Seleziona tutto */
+.edit-tools { position: fixed; z-index: 3500; display: flex; gap: 6px; padding: 6px; background: #2b2f38; border-radius: 12px; box-shadow: var(--shadow); max-width: calc(100vw - 16px); }
+.edit-tools[hidden] { display: none; }
+.edit-tools button { min-height: 38px; padding: 6px 11px; border: 0; border-radius: 9px; background: #444a57; color: #fff; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.edit-tools button:disabled { opacity: .4; }
+ol.steps { margin: 8px 0 10px 20px; padding: 0; font-size: 14px; line-height: 1.45; display: flex; flex-direction: column; gap: 6px; }

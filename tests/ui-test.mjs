@@ -26,7 +26,8 @@ await ctx.route('https://nominatim.openstreetmap.org/**', (route) => {
   nominatimLog.push(q);
   const body = /Via Roma/i.test(q)
     ? [{ lat: '45.7664', lon: '11.7354', display_name: 'Via Roma 1, Bassano del Grappa, Vicenza, Veneto, Italia', name: '' }, { lat: '41.9028', lon: '12.4964', display_name: 'Via Roma 1, Roma, Lazio, Italia', name: '' }]
-    : [];
+    : /Paradiso Perduto/i.test(q) ? [{ lat: '45.76573', lon: '10.80841', display_name: 'Paradiso perduto, Via Posterna, Calchere, Malcesine, Verona, Veneto, Italia', name: 'Paradiso perduto' }]
+      : [];
   route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
 });
 const page = await ctx.newPage();
@@ -535,6 +536,132 @@ await step('Google Maps: link breve senza nome né indirizzo → spiegazione chi
   await sheet().getByRole('button', { name: /Chiudi senza salvare/ }).click();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
 });
+await step('Google Maps: solo nome + link breve, senza lettore → non sceglie da solo, chiede conferma', async () => {
+  nominatimLog.length = 0;
+  await addMenu('Link di Google Maps');
+  await page.locator('.sheet textarea').fill('Paradiso Perduto\nhttps://maps.app.goo.gl/FQ6bETd96gfNaHKg8');
+  await sheet().getByRole('button', { name: 'Crea il luogo' }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("È questo il posto?")');
+  const txt = await sheet().innerText();
+  assert.match(txt, /link breve/);
+  assert.match(txt, /Malcesine/);
+  assert.equal(await page.locator('.sheet .menu-list .btn').count(), 2);      // il posto trovato + "No, non è questo"
+  await page.getByRole('button', { name: /No, non è questo/ }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("Nuovo luogo")');
+  assert.ok(!/45\.76573/.test(await sheet().innerText()), 'nessuna posizione sbagliata');
+  await page.locator('.sheet .sheet-head .icon-btn').click();
+  await sheet().getByRole('button', { name: /Chiudi senza salvare/ }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+});
+await step('Google Maps: con il lettore dei link la posizione è quella vera (Venezia, non Verona)', async () => {
+  const RES = 'https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec';
+  const seen = [];
+  await page.route('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**', (route) => {
+    const u = new URL(route.request().url()); seen.push(u.searchParams.get('u') || (u.searchParams.get('ping') ? 'ping' : ''));
+    const body = u.searchParams.get('ping') ? { ok: true, ping: true }
+      : { ok: true, url: 'https://www.google.com/maps/place/Paradiso+Perduto/@45.4457,12.3267,17z/data=!3m1!4b1!8m2!3d45.44571!4d12.32891', title: 'Paradiso Perduto · Fondamenta della Misericordia' };
+    route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
+  });
+  await page.evaluate((r) => localStorage.setItem('ae.settings', JSON.stringify({ resolverUrl: r })), RES);
+  nominatimLog.length = 0;
+  await addMenu('Link di Google Maps');
+  await page.locator('.sheet textarea').fill('Paradiso Perduto\nhttps://maps.app.goo.gl/FQ6bETd96gfNaHKg8');
+  await sheet().getByRole('button', { name: 'Crea il luogo' }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("Nuovo luogo")');
+  assert.equal(await page.getByLabel('Nome *').inputValue(), 'Paradiso Perduto');
+  assert.match(await sheet().innerText(), /45\.44571, 12\.32891/);
+  assert.match(await page.locator('.sheet .warn').first().innerText(), /letta dal link/);
+  assert.deepEqual(seen, ['https://maps.app.goo.gl/FQ6bETd96gfNaHKg8']);
+  assert.ok(!nominatimLog.some((q) => /Paradiso/i.test(q)), 'non cerca più per nome: ' + JSON.stringify(nominatimLog));
+  await sheet().getByRole('button', { name: 'Salva' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  // il lettore non risponde: ripiega sulla ricerca per nome, ma chiede conferma e dice perché
+  await page.unroute('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**');
+  await page.route('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**', (route) => route.fulfill({ status: 500, body: 'no', headers: { 'access-control-allow-origin': '*' } }));
+  await addMenu('Link di Google Maps');
+  await page.locator('.sheet textarea').fill('Paradiso Perduto\nhttps://maps.app.goo.gl/FQ6bETd96gfNaHKg8');
+  await sheet().getByRole('button', { name: 'Crea il luogo' }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("È questo il posto?")');
+  assert.match(await sheet().innerText(), /Lettore dei link/);
+  await page.getByRole('button', { name: /No, non è questo/ }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("Nuovo luogo")');
+  await page.locator('.sheet .sheet-head .icon-btn').click();
+  await sheet().getByRole('button', { name: /Chiudi senza salvare/ }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  await page.unroute('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**');
+  await page.evaluate(() => localStorage.removeItem('ae.settings'));
+});
+await step('Impostazioni: lettore dei link (indirizzo controllato, prova, codice da copiare)', async () => {
+  const RES = 'https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec';
+  await page.route('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true, ping: true }) }));
+  await page.click('#btnSettings');
+  await page.waitForSelector('.sheet-head h2:has-text("Impostazioni")');
+  await page.evaluate(() => { window.__clipOut = null; Object.defineProperty(navigator, 'clipboard', { value: { readText: async () => '', writeText: async (t) => { window.__clipOut = t; } }, configurable: true }); });
+  await page.getByRole('button', { name: /Copia il codice/ }).click();
+  await page.waitForFunction(() => window.__clipOut && window.__clipOut.includes('function doGet'));
+  const inp = page.getByLabel('Indirizzo del lettore');
+  await inp.fill('https://esempio.it/exec');
+  await sheet().getByRole('button', { name: 'Salva', exact: true }).last().click();
+  assert.match(await sheet().innerText(), /non sembra giusto/);
+  await inp.fill(RES);
+  await sheet().getByRole('button', { name: 'Prova' }).click();
+  await page.waitForFunction(() => /Il lettore risponde/.test(document.querySelector('.sheet').innerText));
+  await sheet().getByRole('button', { name: 'Salva', exact: true }).last().click();
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ae.settings')).resolverUrl), RES);
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  await page.unroute('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**');
+  await page.evaluate(() => localStorage.removeItem('ae.settings'));
+});
+await step('campi di testo: barra Incolla / Copia / Taglia / Seleziona tutto', async () => {
+  await page.evaluate(() => { window.__clipIn = 'Piazza dei Signori'; window.__clipOut = null; Object.defineProperty(navigator, 'clipboard', { value: { readText: async () => window.__clipIn, writeText: async (t) => { window.__clipOut = t; } }, configurable: true }); });
+  await addMenu('Cerca un luogo');
+  const inp = page.locator('.sheet input[placeholder^="Nome o indirizzo"]');
+  await inp.click();
+  await page.waitForSelector('.edit-tools:not([hidden])');
+  const bar = page.locator('.edit-tools');
+  const act = (a) => bar.locator(`[data-act="${a}"]`);
+  assert.ok(await act('copy').isDisabled() && await act('cut').isDisabled(), 'campo vuoto: niente da copiare');
+  await act('paste').click();
+  assert.equal(await inp.inputValue(), 'Piazza dei Signori');
+  await act('paste').click();                                   // incolla di nuovo in fondo
+  assert.equal(await inp.inputValue(), 'Piazza dei SignoriPiazza dei Signori');
+  await act('all').click();
+  assert.equal(await inp.evaluate((e) => [e.selectionStart, e.selectionEnd]).then((a) => a[1] - a[0]), 'Piazza dei SignoriPiazza dei Signori'.length);
+  await act('copy').click();
+  await page.waitForFunction(() => window.__clipOut === 'Piazza dei SignoriPiazza dei Signori');
+  await act('cut').click();                                     // taglia tutto
+  assert.equal(await inp.inputValue(), '');
+  // incolla al posto di una parte selezionata
+  await inp.fill('Bar Roma Vecchia');
+  await inp.evaluate((e) => e.setSelectionRange(9, 16));       // "Vecchia"
+  await page.evaluate(() => { window.__clipIn = 'Nuova'; });
+  await act('paste').click();
+  assert.equal(await inp.inputValue(), 'Bar Roma Nuova');
+  // la barra sta sopra il campo e dentro lo schermo
+  const [rb, ri] = await Promise.all([bar.boundingBox(), inp.boundingBox()]);
+  assert.ok(rb.y >= 0 && rb.x >= 0 && rb.x + rb.width <= 392, 'barra dentro lo schermo');
+  assert.ok(rb.y + rb.height <= ri.y + 1 || rb.y >= ri.y + ri.height - 1, 'la barra non copre il campo');
+  await page.keyboard.press('Escape').catch(() => {});
+  await page.locator('.sheet .sheet-head .icon-btn').click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  await page.waitForSelector('.edit-tools', { state: 'hidden' });
+});
+await step('campi di testo: incolla di un elenco su più righe nelle "Cose da portare"', async () => {
+  await page.evaluate(() => { window.__clipIn = '- [ ] Zaino\n• Borraccia\n\n3) Cappello'; });
+  await page.locator('details.sec[data-id="trips"]').evaluate((d) => { d.open = true; });
+  await page.locator('details.sec[data-id="trips"] .row:has-text("Giappone 2027")').first().click();
+  await page.waitForSelector('.sheet-head h2:has-text("Giappone 2027")');
+  await page.locator('details.pack > summary').click();
+  await page.locator('.sheet .pk-add').click();
+  await page.locator('.edit-tools [data-act="paste"]').click();
+  await page.waitForFunction(() => document.querySelectorAll('.pk').length === 4);   // Passaporto + 3 incollate
+  assert.ok(await page.locator('.pk input[aria-label="Depenna: Borraccia"]').isVisible());
+  for (const nm of ['Zaino', 'Borraccia', 'Cappello']) await page.locator(`.pk:has(input[aria-label="Depenna: ${nm}"]) .x-btn`).click();
+  await page.waitForFunction(() => document.querySelectorAll('.pk').length === 1);
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+});
 await step('novità dall\'altro telefono: banner, etichetta "nuovo" e segna come viste', async () => {
   const seed = (docs) => page.evaluate(async (d) => {
     const { createStore } = await import('./js/store.js');
@@ -595,7 +722,7 @@ await step('Impostazioni: mostra versione e novità', async () => {
   await page.click('#btnSettings');
   await page.waitForSelector('.sheet-head h2:has-text("Impostazioni")');
   assert.match(await sheet().innerText(), /Versione \d+\.\d+\.\d+/);
-  await sheet().locator('details.fold summary').click();
+  await sheet().locator('details.fold:has-text("Novità delle versioni") > summary').click();
   assert.match(await sheet().innerText(), /Prima versione/);
   await page.goBack();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
