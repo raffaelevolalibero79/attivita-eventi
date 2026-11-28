@@ -46,7 +46,8 @@ export async function resolveMapsLink(shortUrl, resolverUrl, opts = {}) {
   const parsed = finalUrl ? U.parseMapsUrl(finalUrl) : null;
   if (parsed && !parsed.short) {
     out.url = finalUrl;
-    out.name = parsed.name || '';
+    const sp = U.splitPlaceName(parsed.name);
+    out.name = sp.name; out.address = sp.address;
     if (parsed.lat != null) { out.lat = parsed.lat; out.lng = parsed.lng; }
   }
   if (out.lat == null && d.lat != null && d.lng != null && inRange(+d.lat, +d.lng)) { out.lat = +d.lat; out.lng = +d.lng; }
@@ -55,7 +56,7 @@ export async function resolveMapsLink(shortUrl, resolverUrl, opts = {}) {
     // il titolo di Google è "Nome · Indirizzo": l'indirizzo serve a cercare il posto anche se la posizione esatta non arriva
     const parts = out.title.split(/\s·\s/).map((x) => x.trim()).filter(Boolean);
     if (!out.name) out.name = (parts[0] || '').slice(0, 200);
-    if (parts.length > 1) out.address = parts.slice(1).join(', ').slice(0, 300);
+    if (parts.length > 1 && !out.address) out.address = parts.slice(1).join(', ').slice(0, 300);
   }
   return out;
 }

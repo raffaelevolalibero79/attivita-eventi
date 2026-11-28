@@ -586,3 +586,13 @@ export function packDupIds(list) {
 export function parsePackText(raw) {
   return String(raw || '').split(/\r?\n/).map((l) => l.replace(/^\s*(?:[-*•·▪◦☐☑✓✔□■]\s*)?(?:\[[ xX]?\]\s*)?(?:\d+[.)]\s*)?/u, '').replace(/\s+/g, ' ').trim()).filter(Boolean).map((t) => t.slice(0, 200)).slice(0, 300);
 }
+
+// Google scrive spesso nel link "Nome, Via, numero, CAP Città": separa il nome dall'indirizzo.
+export function splitPlaceName(full) {
+  const f = String(full || '').trim();
+  const i = f.indexOf(',');
+  if (i < 0) return { name: f.slice(0, 200), address: '' };
+  const rest = f.slice(i + 1).trim();
+  if (!rest || !(/\d/.test(rest) || rest.includes(','))) return { name: f.slice(0, 200), address: '' };
+  return { name: f.slice(0, i).trim().slice(0, 200), address: rest.slice(0, 300) };
+}

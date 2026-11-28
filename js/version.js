@@ -3,9 +3,13 @@
 //   • secondo numero = funzione nuova o cambiata in modo visibile
 //   • terzo numero  = piccola correzione
 // Il numero va tenuto uguale anche in sw.js (lo controlla il test automatico).
-export const APP_VERSION = '1.9.1';
+export const APP_VERSION = '1.9.2';
 export const APP_DATE = '2026-11-28';
 export const CHANGELOG = [
+  { v: '1.9.2', d: '2026-11-28', items: [
+    'Link di Google Maps: quando il link contiene "Nome, Via, numero, CAP Città" (come Paradiso Perduto), nome e indirizzo vengono separati e il posto si cerca con la città giusta (Venezia), non più per solo nome.',
+    'Sistemato il testo a capo e gli stili in tutta l\'app (il risultato di "Leggi questo link" ora va a capo, le descrizioni mantengono le righe).',
+  ] },
   { v: '1.9.1', d: '2026-11-28', items: [
     'Il riquadro e la categoria "Luoghi" ora si chiamano "Eventi".',
     'Link di Google Maps: corretto l\'errore che metteva il posto in mezzo agli Stati Uniti (era la vista di partenza di Google, non il posto). Ora viene scartata e si usa l\'indirizzo che Google scrive nel titolo del posto.',

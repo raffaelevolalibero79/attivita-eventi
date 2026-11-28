@@ -211,8 +211,11 @@ export async function placeFromMaps(raw, { near = null, resolverUrl = '', resolv
   const draft = { name: '', address: '', lat: null, lng: null, link: url, category: 'vedere' };
   let note = '', candidates = [], hint = '', exact = false;
   const coords = U.parseCoords(raw);
-  if (parsed && !parsed.short && parsed.lat != null) { draft.lat = parsed.lat; draft.lng = parsed.lng; draft.name = parsed.name || ''; draft.address = parsed.query || ''; exact = true; }
-  else if (parsed && !parsed.short) { draft.name = parsed.name || ''; draft.address = parsed.query || ''; }
+  if (parsed && !parsed.short) {
+    const sp = U.splitPlaceName(parsed.name);                  // "Nome, Via, numero, CAP Città" → nome + indirizzo
+    draft.name = sp.name; draft.address = parsed.query || sp.address;
+    if (parsed.lat != null) { draft.lat = parsed.lat; draft.lng = parsed.lng; exact = true; }
+  }
   if (!draft.name) draft.name = shared.name && !/^https?:/i.test(shared.name) ? shared.name : '';
   if (!draft.address) draft.address = shared.address;
   if (draft.lat == null && coords) { draft.lat = coords.lat; draft.lng = coords.lng; note = 'Posizione presa dalle coordinate: è quella esatta.'; exact = true; }

@@ -356,4 +356,15 @@ t('link di Google Maps lunghi: la vista di partenza (centro USA, zoom piccolo) n
   assert.equal(U.parseMapsUrl('https://www.google.com/maps/@45.4457,12.3267,300m/data=!3m1').lat, 45.4457);
   assert.equal(U.CATEGORIES.luoghi.label, 'Eventi');
 });
+t('Google scrive "Nome, Via, numero, CAP Città" nel link: nome e indirizzo si separano', () => {
+  assert.deepEqual(U.splitPlaceName('Paradiso Perduto, Fondamenta Cannaregio, 2540, 30100 Venezia VE'), { name: 'Paradiso Perduto', address: 'Fondamenta Cannaregio, 2540, 30100 Venezia VE' });
+  assert.deepEqual(U.splitPlaceName('Bar Roma'), { name: 'Bar Roma', address: '' });
+  assert.deepEqual(U.splitPlaceName('Pizza, da Mario'), { name: 'Pizza, da Mario', address: '' });   // senza numeri né altre virgole è un nome
+});
+await ta('lettore (app): dal nome lungo del link ricava nome e indirizzo (caso Paradiso Perduto)', async () => {
+  const r = await resolveMapsLink('https://maps.app.goo.gl/FSnZN3hyr3aFzfQi7', RES, { fetchImpl: fakeFetch({ ok: true, url: 'https://www.google.com/maps/place/Paradiso+Perduto,+Fondamenta+Cannaregio,+2540,+30100+Venezia+VE/data=!4m2!3m1!1s0x477eb' }) });
+  assert.equal(r.lat, null);
+  assert.equal(r.name, 'Paradiso Perduto');
+  assert.equal(r.address, 'Fondamenta Cannaregio, 2540, 30100 Venezia VE');
+});
 console.log(`\n${n} test superati`);

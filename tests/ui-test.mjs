@@ -611,6 +611,34 @@ await step('Google Maps: il lettore restituisce il centro degli Stati Uniti → 
   await page.unroute('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**');
   await page.evaluate(() => localStorage.setItem('ae.settings', JSON.stringify({ resolverUrl: 'off' })));
 });
+await step('Google Maps: il link letto contiene "Nome, Via, numero, CAP Città" → nome e indirizzo separati, posto trovato a Venezia', async () => {
+  const RES = 'https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec';
+  await page.route('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+    body: JSON.stringify({ ok: true, url: 'https://www.google.com/maps/place/Paradiso+Perduto,+Fondamenta+Cannaregio,+2540,+30100+Venezia+VE/@37.0625,-95.677068,4z/data=!4m2!3m1!1s0x477eb' }) }));
+  await page.evaluate((r) => localStorage.setItem('ae.settings', JSON.stringify({ resolverUrl: r })), RES);
+  await addMenu('Link di Google Maps');
+  await page.locator('.sheet textarea').fill('https://maps.app.goo.gl/FSnZN3hyr3aFzfQi7');
+  await sheet().getByRole('button', { name: 'Crea il luogo' }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("Nuovo luogo")');
+  assert.equal(await page.getByLabel('Nome *').inputValue(), 'Paradiso Perduto');
+  assert.equal(await page.locator('.sheet input[placeholder^="Via, numero"]').inputValue(), 'Fondamenta Cannaregio, 2540, 30100 Venezia VE');
+  const txt = await sheet().innerText();
+  assert.ok(!/37\.06250/.test(txt));
+  assert.match(txt, /45\.44570, 12\.32880/);
+  await page.locator('.sheet .sheet-head .icon-btn').click();
+  await sheet().getByRole('button', { name: /Chiudi senza salvare/ }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  await page.unroute('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**');
+  await page.evaluate(() => localStorage.setItem('ae.settings', JSON.stringify({ resolverUrl: 'off' })));
+});
+await step('le finestre usano gli stili: il risultato della prova va a capo e la descrizione mantiene le righe', async () => {
+  const ok = await page.evaluate(async () => {
+    const { el } = await import('./js/ui.js');
+    const d = el('div', { style: { whiteSpace: 'pre-wrap', marginTop: '10px' } });
+    return d.style.whiteSpace === 'pre-wrap' && d.style.marginTop === '10px';
+  });
+  assert.ok(ok);
+});
 await step('Impostazioni: lettore dei link (indirizzo controllato, prova, codice da copiare)', async () => {
   const RES = 'https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec';
   await page.route('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true, ping: true }) }));

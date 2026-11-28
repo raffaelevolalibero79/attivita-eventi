@@ -10,6 +10,7 @@ export function el(tag, attrs, ...kids) {
       else if (k === 'text') n.textContent = String(v);
       else if (k.startsWith('on')) { if (typeof v === 'function') n.addEventListener(k.slice(2).toLowerCase(), v); }
       else if (k === 'dataset') Object.assign(n.dataset, v);
+      else if (k === 'style' && typeof v === 'object') Object.assign(n.style, v);
       else if (k === 'value') n.value = v;
       else if (k === 'checked' || k === 'selected' || k === 'disabled' || k === 'hidden') n[k] = !!v;
       else if (k === 'html' || k === 'innerHTML' || k === 'outerHTML') continue; // vietato
