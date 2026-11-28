@@ -3,9 +3,14 @@
 //   • secondo numero = funzione nuova o cambiata in modo visibile
 //   • terzo numero  = piccola correzione
 // Il numero va tenuto uguale anche in sw.js (lo controlla il test automatico).
-export const APP_VERSION = '1.9.0';
+export const APP_VERSION = '1.9.1';
 export const APP_DATE = '2026-11-28';
 export const CHANGELOG = [
+  { v: '1.9.1', d: '2026-11-28', items: [
+    'Il riquadro e la categoria "Luoghi" ora si chiamano "Eventi".',
+    'Link di Google Maps: corretto l\'errore che metteva il posto in mezzo agli Stati Uniti (era la vista di partenza di Google, non il posto). Ora viene scartata e si usa l\'indirizzo che Google scrive nel titolo del posto.',
+    'Lettore dei link aggiornato (v2: cerca la posizione anche nella pagina di Google) e nuovo riquadro nelle Impostazioni "Leggi questo link" per vedere cosa trova. L\'indirizzo del lettore è già scritto in config.js, quindi vale su entrambi i telefoni.',
+  ] },
   { v: '1.9.0', d: '2026-11-28', items: [
     'In ogni campo dove si scrive compare una barra con "Incolla", "Copia", "Taglia" e "Seleziona tutto" (anche quando il menu del telefono non esce).',
     'Link di Google Maps: nuovo "lettore dei link" gratuito (si crea una volta sola dalle Impostazioni, nel tuo account Google) che legge la posizione vera dietro il link breve, così il posto non viene più scambiato con uno omonimo in un\'altra città.',

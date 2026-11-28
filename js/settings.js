@@ -3,7 +3,7 @@
 import { el, openSheet, toast, confirmDialog, field, select, downloadText, pickFile, clear } from './ui.js';
 import { CLAUDE_MODELS, CLAUDE_DEFAULT_MODEL, FIREBASE_CONFIG, MAPS_RESOLVER_URL } from './config.js';
 import { RESOLVER_CODE } from './resolvercode.js';
-import { isResolverUrl, pingResolver } from './mapsresolver.js';
+import { isResolverUrl, pingResolver, resolveMapsLink } from './mapsresolver.js';
 import { geocode, getPosition, reverseGeocode } from './geo.js';
 import { cloudConfigured, isLocalOnlyChosen, setLocalOnly } from './store.js';
 import { APP_VERSION, APP_DATE, CHANGELOG } from './version.js';
@@ -21,7 +21,8 @@ export function getSettings() {
     if (CLAUDE_MODELS[o.claudeModel]) s.claudeModel = o.claudeModel;
     s.useClaude = !!o.useClaude && !!s.claudeKey;
     const ru = typeof o.resolverUrl === 'string' ? o.resolverUrl.trim() : '';
-    s.resolverUrl = isResolverUrl(ru) ? ru : (isResolverUrl(MAPS_RESOLVER_URL) ? MAPS_RESOLVER_URL : '');
+    // 'off' = tolto di proposito su questo telefono; vuoto = vale quello scritto in config.js (uguale per tutti i telefoni)
+    s.resolverUrl = ru === 'off' ? '' : isResolverUrl(ru) ? ru : (isResolverUrl(MAPS_RESOLVER_URL) ? MAPS_RESOLVER_URL : '');
     return s;
   } catch { return { ...DEFAULTS }; }
 }
@@ -118,7 +119,8 @@ export function openSettings({ store, onChanged }) {
 
   // --- Lettore dei link di Google Maps ---
   const resInp = el('input', { type: 'text', autocomplete: 'off', placeholder: 'https://script.google.com/macros/s/…/exec', value: s0.resolverUrl, 'aria-label': 'Indirizzo del lettore' });
-  const resMsg = el('div', { class: 'hint' });
+  const testInp = el('input', { type: 'text', autocomplete: 'off', placeholder: 'https://maps.app.goo.gl/…', 'aria-label': 'Link di prova' });
+  const resMsg = el('div', { class: 'hint', style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } });
   const say = (t, cls = 'hint') => { resMsg.className = cls; resMsg.textContent = t; };
   const resBox = el('div', { class: 'field' },
     el('div', { class: 'lbl', text: 'Lettore dei link di Google Maps (consigliato, gratuito)' }),
@@ -140,7 +142,7 @@ export function openSettings({ store, onChanged }) {
       el('button', { type: 'button', class: 'btn small', text: 'Salva', onclick: () => {
         const v = resInp.value.trim();
         if (v && !isResolverUrl(v)) return say('L\'indirizzo non sembra giusto: deve iniziare con https://script.google.com/macros/s/ e finire con /exec', 'warn');
-        saveSettings({ resolverUrl: v }); say(v ? 'Salvato su questo telefono.' : 'Lettore tolto.'); onChanged();
+        saveSettings({ resolverUrl: v || 'off' }); say(v ? 'Salvato su questo telefono.' : 'Lettore disattivato su questo telefono.'); onChanged();
       } }),
       el('button', { type: 'button', class: 'btn small', text: 'Prova', onclick: async (e) => {
         const b = e.currentTarget; b.disabled = true; say('Provo…');
@@ -148,6 +150,20 @@ export function openSettings({ store, onChanged }) {
         catch (er) { say(`Il lettore non risponde: ${er.message}`, 'warn'); }
         finally { b.disabled = false; }
       } })),
+    field('Prova con un link (facoltativo)', testInp),
+    el('button', { type: 'button', class: 'btn small', text: 'Leggi questo link', onclick: async (e) => {
+      const b = e.currentTarget, v = testInp.value.trim();
+      if (!v) return say('Incolla un link breve di Google Maps (maps.app.goo.gl/…).', 'warn');
+      b.disabled = true; say('Leggo il link…');
+      try {
+        const r = await resolveMapsLink(v, resInp.value.trim() || getSettings().resolverUrl);
+        say([
+          r.lat != null ? `Posizione: ${r.lat.toFixed(5)}, ${r.lng.toFixed(5)} (trovata da: ${r.from || 'indirizzo del link'})` : 'Posizione esatta: non trovata',
+          `Nome: ${r.name || '—'}`, `Indirizzo: ${r.address || '—'}`, `Passaggi: ${r.hops}`, `Pagina letta: ${r.url ? r.url.slice(0, 110) : '—'}`,
+        ].join('\n'), r.lat != null ? 'hint' : 'warn');
+      } catch (er) { say(er.message, 'warn'); }
+      finally { b.disabled = false; }
+    } }),
     resMsg);
 
   // --- Claude ---

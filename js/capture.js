@@ -221,8 +221,9 @@ export async function placeFromMaps(raw, { near = null, resolverUrl = '', resolv
     try {
       const r = await resolve(url, resolverUrl);
       if (r.name && !draft.name) draft.name = r.name;
+      if (r.address && !draft.address) draft.address = r.address;
       if (r.lat != null) { draft.lat = r.lat; draft.lng = r.lng; exact = true; note = 'Posizione letta dal link di Google Maps: è quella esatta.'; }
-      else hint = 'Il lettore ha trovato il nome ma non la posizione esatta. ';
+      else hint = r.address ? '' : 'Il lettore ha trovato il nome ma non la posizione esatta. ';
     } catch (e) { hint = `${e.message}. `; }
   }
   if (draft.lat == null) {

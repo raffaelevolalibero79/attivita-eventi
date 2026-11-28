@@ -14,7 +14,7 @@ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, lo
 // Prova sempre in modalità "solo questo telefono" (la rete esterna non c'è) e con un lettore di testo finto,
 // così si prova tutto il percorso della foto senza scaricare nulla.
 await ctx.addInitScript(() => {
-  try { localStorage.setItem('ae.localOnly', '1'); } catch { /* ignora */ }
+  try { localStorage.setItem('ae.localOnly', '1'); if (!localStorage.getItem('ae.settings')) localStorage.setItem('ae.settings', JSON.stringify({ resolverUrl: 'off' })); } catch { /* ignora */ }
   window.Tesseract = { createWorker: async () => ({
     recognize: async () => ({ data: { text: 'FESTA DELLA ZUCCA\nSabato 5 dicembre 2026\nore 18:00\nPresso Piazza Libertà, Breganze\nIngresso 5 euro' } }),
     terminate: async () => {},
@@ -26,6 +26,7 @@ await ctx.route('https://nominatim.openstreetmap.org/**', (route) => {
   nominatimLog.push(q);
   const body = /Via Roma/i.test(q)
     ? [{ lat: '45.7664', lon: '11.7354', display_name: 'Via Roma 1, Bassano del Grappa, Vicenza, Veneto, Italia', name: '' }, { lat: '41.9028', lon: '12.4964', display_name: 'Via Roma 1, Roma, Lazio, Italia', name: '' }]
+    : /Paradiso Perduto.*Venezia|Misericordia.*Venezia/i.test(q) ? [{ lat: '45.44570', lon: '12.32880', display_name: 'Paradiso Perduto, Fondamenta della Misericordia, Cannaregio, Venezia, Veneto, Italia', name: 'Paradiso Perduto' }]
     : /Paradiso Perduto/i.test(q) ? [{ lat: '45.76573', lon: '10.80841', display_name: 'Paradiso perduto, Via Posterna, Calchere, Malcesine, Verona, Veneto, Italia', name: 'Paradiso perduto' }]
       : [];
   route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
@@ -45,7 +46,7 @@ await step('avvio: calendario del mese corrente, sezioni chiuse', async () => {
   assert.equal(await page.locator('.cal-cell').count(), 42);
   assert.equal(await page.locator('details.sec[open]').count(), 0);
   assert.equal(await page.locator('details.sec').count(), 7);
-  assert.deepEqual(await page.locator('details.sec > summary').allInnerTexts().then((a) => a.map((t) => t.replace(/\s*\d+\s*$/, '').replace(/\s+/g, ' ').trim())), ['📅 Prossimi eventi', '❔ Da valutare', '🏛️ Da vedere', '🍽️ Mangiare', '📍 Luoghi', '🚫 Non mi interessa', '🧳 Viaggi']);
+  assert.deepEqual(await page.locator('details.sec > summary').allInnerTexts().then((a) => a.map((t) => t.replace(/\s*\d+\s*$/, '').replace(/\s+/g, ' ').trim())), ['📅 Prossimi eventi', '❔ Da valutare', '🏛️ Da vedere', '🍽️ Mangiare', '📍 Eventi', '🚫 Non mi interessa', '🧳 Viaggi']);
   assert.doesNotMatch(await page.locator('#sections').innerText(), /Statistiche/);
   assert.equal((await page.locator('header.top h1').innerText()).trim(), 'Attività ed eventi');      // niente numero di versione nel titolo
   assert.equal(await page.locator('#ver').count(), 0);
@@ -195,13 +196,13 @@ await step('luogo a mano, sezioni a tendina e filtri', async () => {
   await page.locator('#filters .chip.cat-mangiare').click();
   await page.waitForFunction(() => document.querySelectorAll('.cal-cell[data-date="2026-11-28"] .bar').length === 2);
 });
-await step('categoria "Luoghi": segnaposto semplice, subito nel riquadro Luoghi, non in Da valutare', async () => {
+await step('categoria "Eventi" (ex Luoghi): segnaposto semplice, subito nel riquadro Eventi, non in Da valutare', async () => {
   const secText = (id) => page.evaluate((x) => document.querySelector(`details.sec[data-id="${x}"]`).innerText, id);
   // il luogo ha 4 categorie, l'evento solo 3
   await addMenu('Nuovo luogo a mano');
   assert.equal(await sheet().locator('.chip.cat-luoghi').count(), 1);
   await page.getByLabel('Nome *').fill('Via Gasparona');
-  await sheet().getByRole('button', { name: /Luoghi/ }).click();
+  await sheet().getByRole('button', { name: /Eventi/ }).click();
   assert.equal(await page.getByLabel('Stato').inputValue(), 'interessa');       // un segnaposto non va "valutato"
   await sheet().getByRole('button', { name: 'Salva' }).click();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
@@ -230,7 +231,7 @@ await step('categoria "Luoghi": segnaposto semplice, subito nel riquadro Luoghi,
   assert.equal(await sheet().locator('.chip.cat-mangiare, .chip.cat-attivita, .chip.cat-vedere').count(), 3);
   await page.locator('.sheet .sheet-head .icon-btn').click();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
-  // filtro in alto: c'è il bottone "Luoghi"
+  // filtro in alto: c'è il bottone "Eventi"
   assert.equal(await page.locator('#filters .chip.cat-luoghi').count(), 1);
 });
 await step('calendario: mostra sempre tutti gli eventi con data, anche con il filtro "stato" attivo', async () => {
@@ -589,7 +590,26 @@ await step('Google Maps: con il lettore dei link la posizione è quella vera (Ve
   await sheet().getByRole('button', { name: /Chiudi senza salvare/ }).click();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
   await page.unroute('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**');
-  await page.evaluate(() => localStorage.removeItem('ae.settings'));
+  await page.evaluate(() => localStorage.setItem('ae.settings', JSON.stringify({ resolverUrl: 'off' })));
+});
+await step('Google Maps: il lettore restituisce il centro degli Stati Uniti → viene scartato e si usa l\'indirizzo del titolo (Venezia)', async () => {
+  const RES = 'https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec';
+  await page.route('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+    body: JSON.stringify({ ok: true, url: 'https://www.google.com/maps/place/Paradiso+Perduto/@37.0625,-95.677068,4z/data=!4m2', lat: 37.0625, lng: -95.677068, title: 'Paradiso Perduto · Fondamenta della Misericordia, 2540, 30121 Venezia VE', hops: 2 }) }));
+  await page.evaluate((r) => localStorage.setItem('ae.settings', JSON.stringify({ resolverUrl: r })), RES);
+  await addMenu('Link di Google Maps');
+  await page.locator('.sheet textarea').fill('Paradiso Perduto\nhttps://maps.app.goo.gl/FSnZN3hyr3aFzfQi7');
+  await sheet().getByRole('button', { name: 'Crea il luogo' }).click();
+  await page.waitForSelector('.sheet-head h2:has-text("Nuovo luogo")');
+  const txt = await sheet().innerText();
+  assert.ok(!/37\.06250/.test(txt), 'mai il centro degli Stati Uniti');
+  assert.match(txt, /45\.44570, 12\.32880/);
+  assert.match(await page.locator('.sheet input[placeholder^="Via, numero"]').inputValue(), /Fondamenta della Misericordia/);
+  await page.locator('.sheet .sheet-head .icon-btn').click();
+  await sheet().getByRole('button', { name: /Chiudi senza salvare/ }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
+  await page.unroute('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**');
+  await page.evaluate(() => localStorage.setItem('ae.settings', JSON.stringify({ resolverUrl: 'off' })));
 });
 await step('Impostazioni: lettore dei link (indirizzo controllato, prova, codice da copiare)', async () => {
   const RES = 'https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec';
@@ -606,12 +626,15 @@ await step('Impostazioni: lettore dei link (indirizzo controllato, prova, codice
   await inp.fill(RES);
   await sheet().getByRole('button', { name: 'Prova' }).click();
   await page.waitForFunction(() => /Il lettore risponde/.test(document.querySelector('.sheet').innerText));
+  await page.getByLabel('Link di prova').fill('https://maps.app.goo.gl/FSnZN3hyr3aFzfQi7');
+  await sheet().getByRole('button', { name: 'Leggi questo link' }).click();
+  await page.waitForFunction(() => /Posizione esatta: non trovata/.test(document.querySelector('.sheet').innerText));
   await sheet().getByRole('button', { name: 'Salva', exact: true }).last().click();
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('ae.settings')).resolverUrl), RES);
   await page.goBack();
   await page.waitForFunction(() => document.querySelectorAll('.sheet').length === 0);
   await page.unroute('https://script.google.com/macros/s/AKfycbxTESTRESOLVER1234/exec**');
-  await page.evaluate(() => localStorage.removeItem('ae.settings'));
+  await page.evaluate(() => localStorage.setItem('ae.settings', JSON.stringify({ resolverUrl: 'off' })));
 });
 await step('campi di testo: barra Incolla / Copia / Taglia / Seleziona tutto', async () => {
   await page.evaluate(() => { window.__clipIn = 'Piazza dei Signori'; window.__clipOut = null; Object.defineProperty(navigator, 'clipboard', { value: { readText: async () => window.__clipIn, writeText: async (t) => { window.__clipOut = t; } }, configurable: true }); });

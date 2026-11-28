@@ -76,7 +76,7 @@ export function createSections(host, ctx) {
     { id: 'eval', title: '❔ Da valutare', build: buildEval, count: (d) => evalItems(d).events.length + evalItems(d).places.length },
     { id: 'see', title: '🏛️ Da vedere', build: (d) => buildCat(d, isSee, 'Nessun luogo "da vedere" che ti interessa. Segna ⭐ un luogo in "Da valutare" e arriva qui.'), count: (d) => placesOf(d, isSee, DONE).length },
     { id: 'eat', title: '🍽️ Mangiare', build: (d) => buildCat(d, isEat, 'Nessun posto dove mangiare che ti interessa. Segna ⭐ un luogo in "Da valutare" e arriva qui.'), count: (d) => placesOf(d, isEat, DONE).length },
-    { id: 'places', title: '📍 Luoghi', build: buildPins, count: (d) => pinItems(d).length },
+    { id: 'places', title: '📍 Eventi', build: buildPins, count: (d) => pinItems(d).length },
     { id: 'no', title: '🚫 Non mi interessa', build: buildNo, count: (d) => noItems(d).events.length + noItems(d).places.length },
     { id: 'trips', title: '🧳 Viaggi', build: buildTrips, count: (d) => d.trips.length },
   ];
@@ -153,7 +153,7 @@ export function createSections(host, ctx) {
   }
   function buildPins(data) {
     const list = pinItems(data);
-    return list.length ? list.map((p) => placeRow(p, plH())) : [empty('Qui trovi i segnaposto GPS che classifichi come "Luoghi" (creati nell\'app o importati da Google Maps) e le attività già fatte.')];
+    return list.length ? list.map((p) => placeRow(p, plH())) : [empty('Qui trovi i segnaposto GPS che classifichi come "Eventi" (creati nell\'app o importati da Google Maps) e le attività già fatte.')];
   }
   function buildCat(data, cats, emptyText, sts = DONE) {
     const order = { interessa: 0, fatto: 1 };

@@ -5,7 +5,7 @@ export const CATEGORIES = {
   mangiare: { label: 'Mangiare', color: '#e8590c', icon: '🍽️' },
   attivita: { label: 'Attività', color: '#2f9e44', icon: '🎯' },
   vedere: { label: 'Da vedere', color: '#1c7ed6', icon: '🏛️' },
-  luoghi: { label: 'Luoghi', color: '#0c8599', icon: '📍' },     // solo per i luoghi (segnaposto GPS), non per gli eventi
+  luoghi: { label: 'Eventi', color: '#0c8599', icon: '📍' },     // solo per i luoghi (segnaposto GPS), non per gli eventi
 };
 export const CAT_KEYS = Object.keys(CATEGORIES);
 export const EVENT_CAT_KEYS = ['mangiare', 'attivita', 'vedere'];
@@ -235,6 +235,8 @@ export function linkKind(u) {
 const inRange = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
 
 // Legge le coordinate da un link lungo di Google Maps. I link corti non si possono aprire dall'app.
+// Centro degli Stati Uniti: è quello che Google mostra quando non sa dov'è il posto
+export const isDefaultView = (lat, lng) => Math.abs(lat - 37.0625) < 0.01 && Math.abs(lng + 95.677) < 0.05;
 export function parseMapsUrl(raw) {
   let u;
   try { u = new URL(String(raw).trim()); } catch { return null; }
@@ -245,8 +247,13 @@ export function parseMapsUrl(raw) {
   const out = { short, lat: null, lng: null, name: '', query: '' };
   if (short) return out;
   const href = decodeURIComponent(u.href.replace(/\+/g, ' '));
-  let m = /!3d(-?\d{1,3}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)/.exec(href) || /@(-?\d{1,3}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/.exec(href);
-  if (m && inRange(+m[1], +m[2])) { out.lat = +m[1]; out.lng = +m[2]; }
+  let m = /!3d(-?\d{1,3}(?:\.\d+)?)!4d(-?\d{1,3}(?:\.\d+)?)/.exec(href);
+  if (!m) {
+    // "@lat,lng,17z" è il centro della vista: vale solo se è molto ingrandita (un "4z" o il centro degli Stati Uniti sono la vista di partenza di Google, non il posto)
+    const v = /@(-?\d{1,3}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)(?:,(\d+(?:\.\d+)?)([zma]))?/.exec(href);
+    if (v && !(v[4] === 'z' && +v[3] < 12)) m = v;
+  }
+  if (m && inRange(+m[1], +m[2]) && !isDefaultView(+m[1], +m[2])) { out.lat = +m[1]; out.lng = +m[2]; }
   for (const key of ['q', 'query', 'll', 'center', 'destination']) {
     const v = u.searchParams.get(key);
     if (!v) continue;

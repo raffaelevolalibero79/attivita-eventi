@@ -330,4 +330,30 @@ t('lettore: il file nello zip legge solo Google, la CSP lo permette e il service
   const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   for (const f of ['edittools.js', 'mapsresolver.js', 'resolvercode.js']) assert.ok(sw.includes('./js/' + f), f);
 });
+t('lettore (codice Apps Script): il centro degli Stati Uniti non è mai il posto; si usa la pagina o l\'indirizzo nel titolo', () => {
+  const us = 'https://www.google.com/maps/place/Paradiso+Perduto/@37.0625,-95.677068,4z/data=!4m2!3m1!1s0x477eb:0x1';
+  const page = '<html><title>Paradiso Perduto - Google Maps</title><meta property="og:title" content="Paradiso Perduto · Fondamenta della Misericordia, 2540, 30121 Venezia VE"><script>window.APP_INITIALIZATION_STATE=[[[9345.4,12.3289,45.4457],[0,0,0],[1024,768],13.1]];</script></html>';
+  let r = runScript({ 'https://maps.app.goo.gl/V': { code: 302, headers: { Location: us } }, [us]: { code: 200, body: page } }, { u: 'https://maps.app.goo.gl/V' }).out;
+  assert.deepEqual([r.lat, r.lng, r.from], [45.4457, 12.3289, 'pagina-stato']);
+  assert.equal(r.title, 'Paradiso Perduto · Fondamenta della Misericordia, 2540, 30121 Venezia VE');
+  const noPos = '<html><meta property="og:title" content="Paradiso Perduto · Fondamenta della Misericordia, 2540, 30121 Venezia VE"><meta content="https://maps.google.com/maps/api/staticmap?center=37.0625%2C-95.677068&amp;zoom=4" itemprop="image"></html>';
+  r = runScript({ 'https://maps.app.goo.gl/V': { code: 302, headers: { Location: us } }, [us]: { code: 200, body: noPos } }, { u: 'https://maps.app.goo.gl/V' }).out;
+  assert.equal(r.lat, undefined);                         // meglio nessuna posizione che quella sbagliata
+  assert.match(r.title, /Venezia/);
+  assert.equal(runScript({}, { ping: '1' }).out.v, 2);
+});
+await ta('lettore (app): scarta il centro degli Stati Uniti e ricava l\'indirizzo dal titolo', async () => {
+  const r = await resolveMapsLink('https://maps.app.goo.gl/V', RES, { fetchImpl: fakeFetch({ ok: true, url: 'https://www.google.com/maps/place/Paradiso+Perduto/@37.0625,-95.677068,4z/data=!4m2', lat: 37.0625, lng: -95.677068, title: 'Paradiso Perduto · Fondamenta della Misericordia, 2540, 30121 Venezia VE', hops: 2 }) });
+  assert.equal(r.lat, null);
+  assert.equal(r.name, 'Paradiso Perduto');
+  assert.equal(r.address, 'Fondamenta della Misericordia, 2540, 30121 Venezia VE');
+  assert.equal(r.hops, 2);
+});
+t('link di Google Maps lunghi: la vista di partenza (centro USA, zoom piccolo) non è il posto', () => {
+  assert.equal(U.parseMapsUrl('https://www.google.com/maps/place/X/@37.0625,-95.677068,4z/data=!4m2').lat, null);
+  assert.equal(U.parseMapsUrl('https://www.google.com/maps/place/X/@45.4457,12.3267,6z').lat, null);
+  assert.equal(U.parseMapsUrl('https://www.google.com/maps/place/X/@45.4457,12.3267,17z').lat, 45.4457);
+  assert.equal(U.parseMapsUrl('https://www.google.com/maps/@45.4457,12.3267,300m/data=!3m1').lat, 45.4457);
+  assert.equal(U.CATEGORIES.luoghi.label, 'Eventi');
+});
 console.log(`\n${n} test superati`);

@@ -28,4 +28,4 @@ export const CLAUDE_DEFAULT_MODEL = 'claude-sonnet-5-5';
 
 // Indirizzo del "lettore dei link di Google Maps" (si crea una volta sola dalle Impostazioni dell'app).
 // Se lo scrivi qui vale per tutti i telefoni; se resta vuoto lo si può inserire nelle Impostazioni di ogni telefono.
-export const MAPS_RESOLVER_URL = '';
+export const MAPS_RESOLVER_URL = 'https://script.google.com/macros/s/AKfycbxUkDL397LQsPY8ZcVgFEUDygFGK_RrCCoh38nTCovFY8TVyfMziEROF4_Apk1zP0de/exec';
